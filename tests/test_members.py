@@ -115,3 +115,18 @@ def test_cccm_reproduces_sarkhosh_database_statistics():
                   for (_, bw, a, d, As, fc, Vu, *_) in DB])
     assert len(r) == 393
     assert 1.0 < r.mean() < 1.1 and r.std(ddof=1) / r.mean() < 0.16
+
+
+def test_punching_cccm_sfrc_components():
+    fct = members.fctm_mc2010(25.4)
+    st = members.sigma_tu_fibre_factor(0.01, 55, fct)
+    assert st / fct == pytest.approx(2 * 0.405 * 0.5 * 0.58 * 2.5 * 0.01 * 55)
+    rcol = 2 * 152 / math.pi
+    r = members.punching_cccm_sfrc(rcol, 127, 152, 25.4, 0.0083, st)
+    rcrit = rcol + 63.5
+    s = st / fct
+    Acr = math.pi * ((rcrit + 127 / (1 + 2 / 3 * s)) ** 2 - rcrit ** 2)
+    assert r["V_cf"] == pytest.approx(st * Acr * 0.76)
+    r0 = members.punching_cccm_sfrc(rcol, 127, 152, 25.4, 0.0083, 0.0)
+    assert r0["V_cf"] == 0 and r["V_u"] > r0["V_u"]
+    assert members.punching_cccm_sfrc(rcol, 127, 152, 25.4, 0.0083, st, size_reduction=False)["F_red"] == 1.0

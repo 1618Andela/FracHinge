@@ -1368,6 +1368,33 @@ def validation_cccm_rc():
         save(fig, "fig_validation_cccm", lang)
 
 
+def validation_punching_mari2023():
+    """Punching CCCM for SFRC slabs (Mari et al. 2023) implemented in FracHinge, evaluated with the
+    data tabulated in Table 2 of the paper (94 tests). sigma_tu from the fibre factor, Eq. (20), with
+    eta_l = 0.5 and beta_tau of hooked fibres only for type H (straight value otherwise): the paper
+    does not tabulate fR, slab spans or fibre diameter/strength, so the published predictions cannot be
+    recomputed exactly; both statistics are reported."""
+    from data_mari2023_punching import DB as PDB
+    r, rpub, hh = [], [], []
+    for (src, spec, bc, h, d, fcm, fy, rho, fib, ar, Vf, Vexp, rC, rM, rH, rN) in PDB:
+        fct = members.fctm_mc2010(fcm)
+        st = members.sigma_tu_fibre_factor(Vf / 100.0, ar, fct, hooked=(fib == "H"))
+        o = members.punching_cccm_sfrc(2.0 * bc / np.pi, d, h, fcm, rho / 100.0, st)
+        r.append(Vexp * 1e3 / o["V_u"])
+        rpub.append(rC)
+        hh.append(h)
+    r, rpub = np.array(r), np.array(rpub)
+    put("pmN", len(r), "{:d}")
+    put("pmMean", r.mean())
+    put("pmCov", 100 * r.std(ddof=1) / r.mean(), "{:.1f}")
+    put("pmPubMean", rpub.mean(), "{:.3f}")
+    put("pmPubCov", 100 * rpub.std(ddof=1) / rpub.mean(), "{:.1f}")
+    put("pmCorr", np.corrcoef(r, rpub)[0, 1])
+    put("pmHmin", min(hh), "{:.0f}")
+    put("pmHmax", max(hh), "{:.0f}")
+    put("pmMayaMean", np.mean([row[13] for row in PDB]), "{:.3f}")
+
+
 def example_members():
     """Worked examples of the member checks: N-M interaction, slender column, shear with stirrups
     and fibres, punching. Mechanical / fracture-mechanics result first, code reference second."""
@@ -1452,7 +1479,8 @@ if __name__ == "__main__":
     steps = [example1, fig_laws, fig_compression, example2, fig_profiles, validation_size_effect,
              example5, example6, example7, fig_lefm, example4, validation_gao, validation_bosco, validation_carpinteri, validation_delarosa2025, validation_minelli,
              validation_cuenca_shear, validation_tiberti, sensitivity_s, compare_pcm, derived_numbers,
-             validation_masm_cuenca, example_members, validation_cccm_rc]
+             validation_masm_cuenca, example_members, validation_cccm_rc,
+             validation_punching_mari2023]
     if len(sys.argv) > 1:  # run selected steps only, keeping the other numbers already written
         import re as _re
         fn = os.path.join(TAB, "numbers.tex")

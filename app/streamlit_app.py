@@ -478,6 +478,18 @@ with tabs[4]:
                      "Mean values (γ = 1). Muttoni (2008) + Maya Duque et al. (2012), σ(w) from the cohesive law. "
                      "For design apply a global factor or use the code reference."))
         (st.success if pr["V_R"] >= VEdp * 1e3 else st.error)(f"V_Ed / V_R = {VEdp * 1e3 / pr['V_R']:.2f}")
+        st.markdown(t("##### MF · CCCM para losas de HRFA (Marí et al. 2023)", "##### FM · CCCM for SFRC slabs (Marí et al. 2023)"))
+        h_p = st.number_input(t("Canto de la losa h [mm]", "Slab depth h [mm]"), 50.0, 1200.0, float(d_p + 30.0), 5.0)
+        st_p = kO * 0.33 * fR3k if use_f else 0.0
+        pm = members.punching_cccm_sfrc(rc if circ else 4 * rc / np.pi, d_p, h_p, fcm, rho_p, st_p)
+        st.table(pd.DataFrame([[t("σtu = 0,33 fR3 [MPa]", "σtu = 0.33 fR3 [MPa]"), f"{st_p:.2f}"],
+                               ["V_cu [kN]", f"{pm['V_cu'] / 1e3:.0f}"], ["F_red", f"{pm['F_red']:.2f}"],
+                               ["V_cf [kN]", f"{pm['V_cf'] / 1e3:.0f}"], ["V_u [kN]", f"{pm['V_u'] / 1e3:.0f}"]],
+                              columns=[t("Magnitud", "Quantity"), t("Valor", "Value")]))
+        st.caption(t("Valores medios. Los autores obtienen 1,105 (CoV 11,9 %) en 94 ensayos con σtu micromecánico; "
+                     "con σtu de la ley cohesiva el modelo no está validado (la base no publica fR).",
+                     "Mean values. The authors report 1.105 (CoV 11.9 %) on 94 tests with a micromechanical σtu; "
+                     "with σtu from the cohesive law the model is not validated (the database lacks fR)."))
     with cref:
         st.markdown(t("#### Ref. normativa (solo contraste)", "#### Code ref. (comparison only)"))
         if circ:
@@ -492,5 +504,5 @@ with tabs[4]:
 
 st.sidebar.markdown("---")
 st.sidebar.warning(t("Herramienta de apoyo al cálculo: no sustituye la comprobación del proyectista conforme a EN 1992-1-1:2023.", "Design-support tool: it does not replace the designer's verification according to EN 1992-1-1:2023."))
-st.sidebar.caption("FracHinge v1.3.0 · MIT · " + t("Ver docs/ para manual, artículo y curso.",
+st.sidebar.caption("FracHinge v1.4.0 · MIT · " + t("Ver docs/ para manual, artículo y curso.",
                                                   "See docs/ for manual, article and course."))

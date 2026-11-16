@@ -11,7 +11,7 @@ normativo (Anejo L, MC2010, ACI 544.4R).
 mecánico y, por separado, una *referencia normativa*: flexocompresión (diagrama N–M con la rótula cohesiva), pilares
 esbeltos (fisura cohesiva única + segundo orden, ley de compresión del Anejo L de Ruiz et al. 2023), cortante (CCCM de
 Marí et al. 2014 con G_f y cercos; MASM de Marí et al. 2020 para HRFA con σ_tu de la ley cohesiva efecto tamaño de Bažant y cota de orientación de fibras en el término de fibras) y punzonamiento
-(teoría de la fisura crítica de Muttoni 2008 con puenteo cohesivo σ(ψd/6), Maya Duque et al. 2012).
+(teoría de la fisura crítica de Muttoni 2008 con puenteo cohesivo σ(ψd/6), Maya Duque et al. 2012, y CCCM para losas de HRFA de Marí, Spinella y Rodríguez 2023).
 
 ## Validación (reproducible con `python examples/generate_all.py`)
 | Comprobación | Resultado |

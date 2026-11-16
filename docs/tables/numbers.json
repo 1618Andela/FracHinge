@@ -401,5 +401,14 @@
  "rcBYmean": "0.87",
  "rcBYcov": "13.6",
  "rcFckMean": "1.25",
- "rcFckCov": "17.8"
+ "rcFckCov": "17.8",
+ "pmN": "94",
+ "pmMean": "0.93",
+ "pmCov": "23.1",
+ "pmPubMean": "1.105",
+ "pmPubCov": "11.9",
+ "pmCorr": "0.56",
+ "pmHmin": "55",
+ "pmHmax": "180",
+ "pmMayaMean": "1.121"
 }

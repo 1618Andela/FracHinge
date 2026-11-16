@@ -302,3 +302,63 @@ def punching_csct_sfrc(rc: float, d: float, rs: float, fc: float, fy: float, mR:
     Vc, Vf = VR(psi)
     return {"psi": psi, "V_R": Vc + Vf, "V_Rc": Vc, "V_Rf": Vf, "V_flex": Vflex, "b0": b0, "A_p": Ap,
             "w_crack": psi * d / 6.0, "governing": "punching"}
+
+
+# ----------------------------------------------------------------------------------------------
+# Punching: CCCM for SFRC slabs (Mari, Spinella & Rodriguez 2023) -- second mechanical model
+# ----------------------------------------------------------------------------------------------
+
+
+def fctm_mc2010(fcm: float) -> float:
+    """fctm of MC2010 as used by Mari et al. (2020, 2023): 0.3 fck^(2/3) (fck <= 50 MPa),
+    2.12 ln(1 + 0.1 fcm) otherwise, fck = fcm - 8."""
+    fck = fcm - 8.0
+    return 0.3 * fck ** (2.0 / 3.0) if fck <= 50.0 else 2.12 * math.log(1.0 + 0.1 * fcm)
+
+
+def sigma_tu_fibre_factor(Vf: float, Lf_df: float, fct: float, hooked: bool = True,
+                          eta_l: float = 0.5) -> float:
+    """Average residual tensile stress from the fibre factor (Lim et al.; Spinella et al.), Eq. (20) of
+    Mari et al. (2023): sigma_tu / fctm = 2 eta0 eta_l beta_tau Vf Lf/df <= 1, eta0 = 0.405,
+    beta_tau = 0.58 x (2.5 hooked, 1.2 straight). Vf as a fraction. Micromechanical reference value;
+    FracHinge's primary route takes sigma_tu from the cohesive law (EN 14651)."""
+    beta = 0.58 * (2.5 if hooked else 1.2)
+    return min(2.0 * 0.405 * eta_l * beta * Vf * Lf_df, 1.0) * fct
+
+
+def punching_cccm_sfrc(rcol: float, d: float, h: float, fcm: float, rho_l: float, sigma_tu: float,
+                       fy: float | None = None, Es: float = 200000.0, size_reduction: bool = True,
+                       fct: float | None = None) -> dict:
+    """Punching strength of an interior SFRC slab-column connection without shear reinforcement,
+    Compression Chord Capacity Model extended to SFRC by Mari, Spinella & Rodriguez (2023), Table 1,
+    mean values. rcol: radius of the equivalent circular column (same perimeter: 2 b_c / pi for a
+    square column). sigma_tu: residual tensile stress (from the cohesive law in FracHinge).
+
+    Vcu = xi (0.425 + 1.125 x/d) fctm u_crit d >= Vcu,min = [xi (0.375 + 1.125 k_c) + 10/d0] fctm u_crit d,
+      xi = 2 / sqrt(1 + d0/200) >= 0.45 (no slenderness term), u_crit = 2 pi (rcol + 0.5 d), k_c = x/d <= 0.2;
+    Vcf = sigma_tu A_cr F_red, A_cr = pi (r_crack^2 - r_crit^2), r_crack = r_crit + d / (1 + 2/3 sigma_tu/fctm),
+      F_red = 0.005 h <= 1 (reduction for thin slabs proposed by the authors);
+    optional yielding limit Vy = 2 pi rho fy d^2 (1 - rho fy / (2 fck)).
+    The slenderness term of xi is omitted because the slab span is not part of the published input."""
+    fct = fct if fct is not None else fctm_mc2010(fcm)
+    Ec = 22000.0 * (fcm / 10.0) ** 0.3
+    ae_r = Es / Ec * rho_l
+    xd = ae_r * (-1.0 + math.sqrt(1.0 + 2.0 / ae_r))
+    d0 = max(d, 100.0)
+    xi = max(2.0 / math.sqrt(1.0 + d0 / 200.0), 0.45)
+    rcrit = rcol + 0.5 * d
+    u = 2.0 * math.pi * rcrit
+    Vcu = xi * (0.425 + 1.125 * xd) * fct * u * d
+    Vmin = (xi * (0.375 + 1.125 * min(xd, 0.2)) + 10.0 / d0) * fct * u * d
+    Vcu = max(Vcu, Vmin)
+    s = min(sigma_tu / fct, 1.0)
+    rcrack = rcrit + d / (1.0 + 2.0 / 3.0 * s)
+    Acr = math.pi * (rcrack ** 2 - rcrit ** 2)
+    Fred = min(0.005 * h, 1.0) if size_reduction else 1.0
+    Vcf = s * fct * Acr * Fred
+    out = {"x_d": xd, "xi": xi, "u_crit": u, "V_cu": Vcu, "V_cf": Vcf, "A_cr": Acr, "F_red": Fred,
+           "V_u": Vcu + Vcf}
+    if fy is not None:
+        fck = fcm - 8.0
+        out["V_y"] = 2.0 * math.pi * rho_l * fy * d ** 2 * (1.0 - rho_l * fy / (2.0 * fck))
+    return out

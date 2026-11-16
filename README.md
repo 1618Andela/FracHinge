@@ -19,7 +19,7 @@ cross-checks (Annex L, MC2010, ACI 544.4R).
   - bending + axial force: N–M interaction from the cohesive hinge (reference: Annex L block with N);
   - slender columns: single cohesive crack + second order, Annex L compression law of Ruiz et al. (2023) (reference: squash load, EC2 nominal curvature);
   - shear: CCCM (Marí et al. 2014, with G_f size effect, stirrups, strut crushing) and MASM for SFRC (Marí et al. 2020) with σ_tu taken from the cohesive law Bažant's size-effect factor and a fibre-orientation bound on the fibre term (reference: MC2010 V_Rd,F + V_Rd,s, Annex L τ_Rd,cF, stirrup replacement);
-  - punching: Critical Shear Crack Theory (Muttoni 2008) with fibre bridging σ(ψd/6) from the cohesive law (Maya Duque et al. 2012) (reference: EC2-2004, MC2010 Level II).
+  - punching: Critical Shear Crack Theory (Muttoni 2008) with fibre bridging σ(ψd/6) from the cohesive law (Maya Duque et al. 2012), and the CCCM for SFRC slabs of Marí, Spinella & Rodríguez (2023) with σ_tu from the cohesive law (reference: EC2-2004, MC2010 Level II).
 - Interfaces: Python library, **Streamlit app (ES/EN)**, MATLAB/Octave functions.
 
 ## Validation (reproducible with `python examples/generate_all.py`)
@@ -41,7 +41,7 @@ cross-checks (Annex L, MC2010, ACI 544.4R).
 ## Quick start
 ```bash
 pip install -r requirements.txt
-pytest -q                              # 33 tests
+pytest -q                              # 34 tests
 streamlit run app/streamlit_app.py     # graphical application (see DEPLOY.md to publish it online)
 python examples/generate_all.py        # all figures, tables and numbers of the documents
 cd matlab && octave-cli --eval run_tests

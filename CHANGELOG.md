@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.4.0 (2026-11-16) – SFRC punching CCCM
+- New `members.punching_cccm_sfrc` (Marí, Spinella & Rodríguez 2023, Structures 52:854–867) with σ_tu from the cohesive law, switchable thin-slab reduction F_red = 0.005 h ≤ 1; `members.sigma_tu_fibre_factor` (micromechanical reference, Eq. 20) and `members.fctm_mc2010`.
+- 94 SFRC punching tests of the paper in `examples/data_mari2023_punching.py`; with the tabulated data the implementation gives 0.93 (CoV 23 %) against the published 1.105 (CoV 11.9 %) – the table lacks fR, slab spans and fibre diameter/strength, so the published predictions cannot be recomputed exactly (documented).
+- App punching tab shows both mechanical models; manual section; 1 new test.
+
 ## 1.3.0 (2026-11-16) – doctoral theses review
 - CCCM (Marí et al. 2014): default fct = 0.30 min(fcm, 60)^(2/3), the convention of the authors' validation. Independent validation on the 393 RC beams of Sarkhosh (2014, Appendix D; ACI-DAfStb database): mean 1.05, CoV 14.1 %, no bias with depth (`examples/data_sarkhosh2014.py`, `validation_cccm_rc`).
 - MASM: fibre-orientation option `orientation="aligned"` (default, η_or = sin θ_cr, safe-side bound) or `"isotropic"`; justified with the orientation factors measured by Cunha (2010) and the observations of Grünewald (2004), Özyurt (2006) and García Alberti (2015). On the 43 Cuenca beams: 1.23 (CoV 26 %, min 0.81, 10 < 1) versus 0.99 (CoV 29 %, 27 < 1) isotropic.
