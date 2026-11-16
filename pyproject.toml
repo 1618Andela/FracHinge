@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "frachinge"
-version = "1.5.0"
+version = "1.6.0"
 description = "Fracture-mechanics-based design of reinforced, steel-fibre-reinforced and hybrid concrete sections (cohesive cracked hinge)"
 readme = "README.md"
 license = {text = "MIT"}

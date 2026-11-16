@@ -380,6 +380,23 @@ with tabs[2]:
                       "mean 1.05, CoV 14.1 %, no bias with depth."))
         st.caption(t("Coeficientes parciales no calibrados por fiabilidad (Marí et al. 2020).",
                      "Partial factors not calibrated by reliability analysis (Marí et al. 2020)."))
+        st.markdown(t("##### MF · Enfoque unificado de Bažant (ley de efecto tamaño energética)",
+                      "##### FM · Bažant unified approach (energetic size-effect law)"))
+        bu = members.shear_bazant_unified(b, d_s, rho_l, fck, sigma_tu=fFtuk, rho_w=rho_w, fyw=fywk,
+                                          stirrups_min=rho_w * fywk >= 0.062 * np.sqrt(fck) * 1.0 and rho_w > 0,
+                                          orientation=orient, phi=0.75)
+        st.table(pd.DataFrame([["c = k d [mm]", f"{bu['c']:.0f}"], ["γd", f"{bu['gamma_d']:.3f}"],
+                               ["V_c [kN]", f"{bu['V_c'] / 1e3:.1f}"], ["V_F [kN]", f"{bu['V_F'] / 1e3:.1f}"],
+                               ["V_s [kN]", f"{bu['V_s'] / 1e3:.1f}"], ["V_n [kN]", f"{bu['V_n'] / 1e3:.1f}"],
+                               ["φV_n (φ = 0,75) [kN]", f"{bu['V_Rd'] / 1e3:.1f}"]],
+                              columns=[t("Magnitud", "Quantity"), t("Valor", "Value")]))
+        (st.success if bu["V_Rd"] >= VEd * 1e3 else st.error)(f"V_Ed / φV_n = {VEd * 1e3 / bu['V_Rd']:.2f}")
+        st.caption(t("Frosch, Yu, Cusatis y Bažant (2017): V_c = 0,415√fc b c γd, γd = 1,4/√(1+d/d0) ≤ 1. "
+                     "Validación sin ajuste: 393 vigas de HA, media 1,50 (CoV 15,5 %, sin sesgo con el canto); "
+                     "43 vigas de HRFA con puenteo cohesivo alineado, 1,60 (CoV 22,9 %, mínimo 1,05).",
+                     "Frosch, Yu, Cusatis & Bažant (2017): V_c = 0.415√fc b c γd, γd = 1.4/√(1+d/d0) ≤ 1. "
+                     "Validation without fitting: 393 RC beams, mean 1.50 (CoV 15.5 %, no bias with depth); "
+                     "43 SFRC beams with aligned cohesive bridging, 1.60 (CoV 22.9 %, minimum 1.05)."))
     with cref:
         st.markdown(t("#### Ref. normativa (solo contraste)", "#### Code ref. (comparison only)"))
         fctk = 0.7 * fctm
@@ -466,18 +483,23 @@ with tabs[4]:
     if use_f:
         lawf = law_mc2010_frc_linear(fR1k, fR3k) if law_model == "mc2010" else law_annexL(fR1k, fR3k, fctm, E, include_matrix=False)
     with cfm:
-        st.markdown(t("#### MF · CSCT + puenteo cohesivo (principal)", "#### FM · CSCT + cohesive bridging (primary)"))
-        pr = members.punching_csct_sfrc(rc, d_p, rs, fcm, fy_m, mR, dg=dg, fibre_law=lawf, circular=circ)
-        st.table(pd.DataFrame([["ψ [mrad]", f"{1000 * pr['psi']:.2f}"],
-                               ["w = ψd/6 [mm]", f"{pr['psi'] * d_p / 6:.3f}"],
-                               ["V_R,c [kN]", f"{pr['V_Rc'] / 1e3:.0f}"], ["V_R,f [kN]", f"{pr['V_Rf'] / 1e3:.0f}"],
-                               ["V_flex [kN]", f"{pr['V_flex'] / 1e3:.0f}"], ["V_R [kN]", f"{pr['V_R'] / 1e3:.0f}"],
-                               [t("Modo", "Mode"), pr["governing"]]], columns=[t("Magnitud", "Quantity"), t("Valor", "Value")]))
-        st.caption(t("Valores medios (γ = 1). Muttoni (2008) + Maya Duque et al. (2012), σ(w) de la ley cohesiva. "
-                     "Para cálculo divida por un coeficiente global o use la referencia normativa.",
-                     "Mean values (γ = 1). Muttoni (2008) + Maya Duque et al. (2012), σ(w) from the cohesive law. "
-                     "For design apply a global factor or use the code reference."))
-        (st.success if pr["V_R"] >= VEdp * 1e3 else st.error)(f"V_Ed / V_R = {VEdp * 1e3 / pr['V_R']:.2f}")
+        st.markdown(t("#### MF · Enfoque unificado de Bažant, bidireccional (principal)",
+                      "#### FM · Bažant unified approach, two-way (primary)"))
+        b0u = 2 * np.pi * (rc + d_p / 2) if circ else 8 * rc + np.pi * d_p
+        st_pu = kO * 0.33 * fR3k if use_f else 0.0
+        pr = members.punching_bazant_unified(b0u, d_p, rho_p, fcm, sigma_tu=st_pu)
+        st.table(pd.DataFrame([["b0 [mm]", f"{b0u:.0f}"], ["c = k d [mm]", f"{pr['c']:.0f}"],
+                               ["γd", f"{pr['gamma_d']:.3f}"], ["λs", f"{pr['lambda_F']:.3f}"],
+                               ["V_c [kN]", f"{pr['V_c'] / 1e3:.0f}"], ["V_F [kN]", f"{pr['V_F'] / 1e3:.0f}"],
+                               ["V_n [kN]", f"{pr['V_n'] / 1e3:.0f}"]],
+                              columns=[t("Magnitud", "Quantity"), t("Valor", "Value")]))
+        st.caption(t("Valores medios. V_c = 0,83√fc b0 c γd (Frosch et al. 2017) + puenteo cohesivo η λs σtu b0 (d − c). "
+                     "Estructura comprobada en 94 ensayos de Marí et al. (2023) con σtu micromecánico: media 1,79, "
+                     "CoV 12,3 %, ninguno < 1; con σtu de la ley cohesiva no está validado (la base no publica fR).",
+                     "Mean values. V_c = 0.83√fc b0 c γd (Frosch et al. 2017) + cohesive bridging η λs σtu b0 (d − c). "
+                     "Structure checked on 94 tests of Marí et al. (2023) with micromechanical σtu: mean 1.79, "
+                     "CoV 12.3 %, none < 1; with σtu from the cohesive law it is not validated (no fR in the database)."))
+        (st.success if pr["V_n"] >= VEdp * 1e3 else st.error)(f"V_Ed / V_n = {VEdp * 1e3 / pr['V_n']:.2f}")
         st.markdown(t("##### MF · CCCM para losas de HRFA (Marí et al. 2023)", "##### FM · CCCM for SFRC slabs (Marí et al. 2023)"))
         h_p = st.number_input(t("Canto de la losa h [mm]", "Slab depth h [mm]"), 50.0, 1200.0, float(d_p + 30.0), 5.0)
         st_p = kO * 0.33 * fR3k if use_f else 0.0
@@ -504,5 +526,5 @@ with tabs[4]:
 
 st.sidebar.markdown("---")
 st.sidebar.warning(t("Herramienta de apoyo al cálculo: no sustituye la comprobación del proyectista conforme a EN 1992-1-1:2023.", "Design-support tool: it does not replace the designer's verification according to EN 1992-1-1:2023."))
-st.sidebar.caption("FracHinge v1.5.0 · MIT · " + t("Ver docs/ para manual, artículo y curso.",
+st.sidebar.caption("FracHinge v1.6.0 · MIT · " + t("Ver docs/ para manual, artículo y curso.",
                                                   "See docs/ for manual, article and course."))

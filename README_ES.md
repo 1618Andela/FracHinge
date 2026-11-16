@@ -9,9 +9,9 @@ normativo (Anejo L, MC2010, ACI 544.4R).
 
 **Comprobación de elementos (v1.1).** Cada comprobación da un resultado *principal* de mecánica de fractura o modelo
 mecánico y, por separado, una *referencia normativa*: flexocompresión (diagrama N–M con la rótula cohesiva), pilares
-esbeltos (fisura cohesiva única + segundo orden, ley de compresión del Anejo L de Ruiz et al. 2023), cortante (CCCM de
+esbeltos (fisura cohesiva única + segundo orden, ley de compresión del Anejo L de Ruiz et al. 2023), cortante (enfoque unificado de Frosch, Yu, Cusatis y Bažant 2017 con la ley energética de efecto tamaño de Bažant y puenteo cohesivo de las fibras, principal; CCCM de
 Marí et al. 2014 con G_f y cercos; MASM de Marí et al. 2020 para HRFA con σ_tu de la ley cohesiva efecto tamaño de Bažant y cota de orientación de fibras en el término de fibras) y punzonamiento
-(teoría de la fisura crítica de Muttoni 2008 con puenteo cohesivo σ(ψd/6), Maya Duque et al. 2012, y CCCM para losas de HRFA de Marí, Spinella y Rodríguez 2023).
+(enfoque unificado bidireccional con efecto tamaño energético y puenteo cohesivo, y CCCM para losas de HRFA de Marí, Spinella y Rodríguez 2023).
 
 ## Validación (reproducible con `python examples/generate_all.py`)
 | Comprobación | Resultado |
@@ -29,6 +29,9 @@ Marí et al. 2014 con G_f y cercos; MASM de Marí et al. 2020 para HRFA con σ_t
 | Ídem, λ_s + fibras alineadas con el eje, η_or = sen θ_cr (por defecto desde 1.3, cota del lado de la seguridad; datos de orientación de Cunha 2010) | 1,23 (CoV 26,0 %), mín. 0,81, 10/43 cocientes < 1 |
 | 25 pilares esbeltos de HA y HRFA con axil (Caballero-Morrison et al. 2012, 2013), momento máximo con la rótula cohesiva, sin ajuste | 1,00 (CoV 11,3 %) |
 | 393 vigas de HA sin cercos (base de Sarkhosh 2014 / ACI-DAfStb), CCCM de Marí et al. 2014 | 1,05 (CoV 14,1 %), sin sesgo con el canto (EC2 1,14, CoV 15,0 %) |
+| 393 vigas de HA, enfoque unificado de Bažant et al. (2017) con efecto tamaño energético | 1,50 (CoV 15,5 %, nominal), sin sesgo de tamaño (1,48 / 1,57 / 1,48), 2 de 393 < 1 |
+| 43 vigas de HRFA, enfoque unificado + puenteo cohesivo (alineado) | 1,60 (CoV 22,9 %), ninguna < 1 |
+| 94 losas de HRFA a punzonamiento (Marí et al. 2023), Bažant bidireccional + puenteo (σ_tu micromecánico) | 1,79 (CoV 12,3 %), ninguna < 1 |
 
 ## Uso rápido
 ```bash
@@ -45,8 +48,8 @@ Manual técnico, artículo, presentaciones y curso, en español e inglés, en `d
 ## Limitaciones
 Ancho de rótula s = h/2 (hipótesis); fisura dominante única; adherencia rígido-plástica; carga monótona; el CoV de las
 resistencias residuales en el ECOV es un dato del usuario. Elementos: con σ_tu = 0,33 f_R3 el MASM aún sobrestima las vigas con f_R3 alto
-(relación σ_tu–f_R no calibrada); los modelos de pilar (fisura única) y punzonamiento (CSCT + puenteo cohesivo) aún no se han validado con
-ensayos dentro de FracHinge; los coeficientes parciales de los modelos mecánicos de cortante no están calibrados. El programa es una herramienta de análisis y contraste y **no sustituye** a la
+(relación σ_tu–f_R no calibrada); el modelo de pilar (fisura única) aún no se ha validado con ensayos con excentricidad, y el punzonamiento con puenteo cohesivo
+solo se ha comprobado con σ_tu micromecánico (la base disponible no da f_R); los coeficientes parciales de los modelos mecánicos de cortante no están calibrados. El programa es una herramienta de análisis y contraste y **no sustituye** a la
 normativa vigente.
 
 Licencia del código: MIT. Documentos: CC BY 4.0.

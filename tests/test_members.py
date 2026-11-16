@@ -70,13 +70,36 @@ def test_column_slenderness_reduces_capacity():
     assert n2["N_u"] < n2["N_euler"]
 
 
-def test_punching_fibres_increase_capacity():
-    p0 = members.punching_csct_sfrc(150, 200, 1100, 38, 550, 150000)
-    p1 = members.punching_csct_sfrc(150, 200, 1100, 38, 550, 150000, fibre_law=law_mc2010_frc_linear(4, 3.5))
-    assert p1["V_R"] > p0["V_R"] and p1["psi"] > p0["psi"]
-    # failure criterion of Muttoni (2008) satisfied at the solution
-    Vc = 0.75 * p0["b0"] * 200 * math.sqrt(38) / (1 + 15 * p0["psi"] * 200 / 32)
-    assert p0["V_Rc"] == pytest.approx(Vc, rel=1e-9)
+def test_bazant_unified_shear():
+    # neutral axis of the elastic cracked section and nominal V_c = 5 sqrt(f'c) b c (psi) in SI
+    k = members.neutral_axis_elastic(0.012, 38.0)
+    rn = 0.012 * 200000 / (4700 * math.sqrt(38.0))
+    assert k == pytest.approx(math.sqrt(2 * rn + rn ** 2) - rn)
+    assert members.size_factor_unified(200.0) == 1.0
+    assert members.size_factor_unified(1016.0) == pytest.approx(1.4 / math.sqrt(5.0))
+    assert members.size_factor_unified(1016.0, stirrups=True) == 1.0
+    o = members.shear_bazant_unified(300, 450, 0.012, 38.0)
+    assert o["V_c"] == pytest.approx(0.41523 * math.sqrt(38.0) * 300 * k * 450 * o["gamma_d"], rel=1e-3)
+    f = members.shear_bazant_unified(300, 450, 0.012, 38.0, sigma_tu=1.0)
+    assert f["V_F"] == pytest.approx(f["eta_orientation"] * f["lambda_F"] * 300 * (450 - f["c"]))
+    assert f["eta_orientation"] == pytest.approx(1 / math.sqrt(2))
+    s_ = members.shear_bazant_unified(300, 450, 0.012, 38.0, rho_w=0.001, fyw=500)
+    assert s_["V_s"] == pytest.approx(0.001 * 300 * 500 * 450)
+    big = members.shear_bazant_unified(300, 450, 0.012, 38.0, rho_w=0.05, fyw=500)
+    assert big["V_n"] == pytest.approx(5 * big["V_c"])
+
+
+def test_bazant_unified_punching_and_rc_validation():
+    p0 = members.punching_bazant_unified(1500, 200, 0.008, 38.0)
+    p1 = members.punching_bazant_unified(1500, 200, 0.008, 38.0, sigma_tu=1.2)
+    assert p1["V_n"] > p0["V_n"] and p0["V_c"] == pytest.approx(
+        2 * members.shear_bazant_unified(1500, 200, 0.008, 38.0)["V_c"])
+    import sys, os
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "examples"))
+    from data_sarkhosh2014 import DB
+    r = np.array([Vu * 1e3 / members.shear_bazant_unified(bw, d, As / (bw * d), fc)["V_n"]
+                  for (nr, bw, a, d, As, fc, Vu, *_x) in DB])
+    assert len(r) == 393 and 1.4 < r.mean() < 1.6 and (r < 1).sum() <= 3
 
 
 def test_code_references():

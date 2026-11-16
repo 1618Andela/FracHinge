@@ -35,8 +35,10 @@ total = total + 1; pass = pass + fh_check('MASM Eq. (26) [kN]', Vm/1e3, 205.0676
 total = total + 1; pass = pass + fh_check('MASM + Bazant size effect, d = 1440 [kN]', Vs/1e3, 547.5380990780, 1e-6);
 [Vo] = fh_masm_sfrc(250, 1440, 4320, 0.0101, 32.1, 1.65);
 total = total + 1; pass = pass + fh_check('MASM + size effect + aligned fibres [kN]', Vo/1e3, 420.685971835295, 1e-6);
-[Vp] = fh_punching_csct(150, 200, 1100, 38, 550, 150000, 16, 4.0, 3.5);
-total = total + 1; pass = pass + fh_check('CSCT + fibres punching [kN]', Vp/1e3, 1000.9161117991, 1e-3);
-[Vp0] = fh_punching_csct(150, 200, 1100, 38, 550, 150000, 16, 0, 0);
-total = total + 1; pass = pass + fh_check('CSCT plain punching [kN]', Vp0/1e3, 696.6622012519, 1e-3);
+[Vb] = fh_bazant_shear(300, 450, 0.012, 38, 1.2);
+total = total + 1; pass = pass + fh_check('Bazant unified shear + fibres [kN]', Vb/1e3, 161.57851134826814, 1e-9);
+[Vbl] = fh_bazant_shear(300, 1016, 0.010, 30);
+total = total + 1; pass = pass + fh_check('Bazant unified shear, size effect d = 1016 [kN]', Vbl/1e3, 140.65448119007831, 1e-9);
+[Vp] = fh_bazant_shear(1500, 200, 0.008, 38, 1.2, 0, 500, false, true, true);
+total = total + 1; pass = pass + fh_check('Bazant two-way punching + fibres [kN]', Vp/1e3, 615.4410574773516, 1e-9);
 fprintf('\n%d / %d checks passed\n', pass, total);

@@ -1239,7 +1239,6 @@ def validation_masm_cuenca():
       'none' : original Eq. (26);
       'sel'  : Bazant's energetic size-effect law with d0 = 254 mm (ACI 318-19 lambda_s) [adopted];
       'lch'  : same law with d0 scaled by l_ch,FRC / l_ch,plain (Bazant: d0 proportional to l_ch);
-      'csct' : sigma_tu = sigma(w), w = eps d (critical shear crack width, Muttoni & Fernandez Ruiz 2008).
     """
     from scipy.optimize import brentq
     rows = []
@@ -1264,19 +1263,8 @@ def validation_masm_cuenca():
         lch_f = E * (GF + 0.5 * (fFts + fFtu) * 2.5) / fct ** 2
         d0 = 254.0 * lch_f / (E * GF / fct ** 2)
         out["lch"] = V / members.shear_masm_sfrc(bw, d, a, rho, fc, st, d0=d0, orientation="isotropic")["V_u"]
-        law = law_annexL(fR1, fR3, fct, E, wu=10.0, include_matrix=False)
-        Es, Ecs = 200000.0, 10000.0 * fc ** (1.0 / 3.0)
-        n = Es / Ecs
-        c = d * (np.sqrt((rho * n) ** 2 + 2 * rho * n) - rho * n)
-
-        def g(Vt):
-            eps = Vt * (a - d / 2) / (bw * d * rho * Es * (d - c / 3)) * (0.6 * d - c) / (d - c)
-            s_w = float(law.sigma(np.array([eps * d]))[0])
-            return members.shear_masm_sfrc(bw, d, a, rho, fc, s_w, size_effect=None,
-                                           orientation="isotropic")["V_u"] - Vt
-        out["csct"] = V / brentq(g, 1e3, 5e6)
         rows.append(dict(ref=ref, d=d, fR3=fR3, **out))
-    for key, nm in (("rp", "RP"), ("al", "AL"), ("sel", "SEL"), ("lch", "LCH"), ("csct", "CSCT"),
+    for key, nm in (("rp", "RP"), ("al", "AL"), ("sel", "SEL"), ("lch", "LCH"),
                     ("ori", "ORI"), ("orins", "ORINS")):
         mu, cov = _stats([r[key] for r in rows])
         put(f"masm{nm}mean", mu)
@@ -1442,6 +1430,77 @@ def validation_columns_caballero():
         save(fig, "fig_validation_columns", lang)
 
 
+def validation_bazant_shear():
+    """Unified shear approach of Frosch, Yu, Cusatis & Bazant (2017) with the energetic size-effect law,
+    without fitting: (a) 393 RC beams without stirrups (Sarkhosh 2014 / ACI-DAfStb); (b) the Cuenca
+    et al. (2018) SFRC beams failing in shear, with the cohesive bridging term (sigma_tu = 0.33 fR3,
+    size effect lambda_s, orientation bound); (c) 94 SFRC punching tests (Mari et al. 2023, Table 2)
+    with the two-way expression; there fR is not reported and sigma_tu comes from the fibre factor,
+    so (c) checks the structure of the model, not the FracHinge input."""
+    from data_sarkhosh2014 import DB as SDB
+    from data_mari2023_punching import DB as PDB
+    r, d_ = [], []
+    for (nr, bw, a, d, As, fc, Vu, *_x) in SDB:
+        o = members.shear_bazant_unified(bw, d, As / (bw * d), fc)
+        r.append(Vu * 1e3 / o["V_n"])
+        d_.append(d)
+    r, d_ = np.array(r), np.array(d_)
+    put("buRCmean", r.mean())
+    put("buRCcov", 100 * r.std(ddof=1) / r.mean(), "{:.1f}")
+    put("buRCunsafe", int((r < 1).sum()), "{:d}")
+    put("buRCmin", r.min())
+    for nm, lo, hi in (("S", 0, 300), ("M", 300, 600), ("L", 600, 1e9)):
+        put(f"buRC{nm}", r[(d_ >= lo) & (d_ < hi)].mean())
+    rows = []
+    for (ref, bid, fib, vf, bw, d, ad, rho, fc, fR1, fR3, fm, Vu) in CUENCA_DB:
+        if fm not in ("S", "SY"):
+            continue
+        out = {}
+        for key, ori, st in (("ali", "aligned", 0.33 * fR3), ("iso", "isotropic", 0.33 * fR3), ("nof", "aligned", 0.0)):
+            out[key] = Vu * 1e3 / members.shear_bazant_unified(bw, d, rho / 100.0, fc, sigma_tu=st, orientation=ori)["V_n"]
+        rows.append(dict(d=d, fR3=fR3, **out))
+    for key, nm in (("ali", "Ali"), ("iso", "Iso"), ("nof", "Nof")):
+        x = np.array([q[key] for q in rows])
+        put(f"buF{nm}mean", x.mean())
+        put(f"buF{nm}cov", 100 * x.std(ddof=1) / x.mean(), "{:.1f}")
+        put(f"buF{nm}unsafe", int((x < 1).sum()), "{:d}")
+        put(f"buF{nm}min", x.min())
+        put(f"buF{nm}big", np.mean([q[key] for q in rows if q["d"] >= 900]))
+        put(f"buF{nm}small", np.mean([q[key] for q in rows if q["d"] < 900]))
+    rp = []
+    for (src, spec, bc, h, d, fcm, fy, rho, fib, ar, Vf, Vexp, *_x) in PDB:
+        st = members.sigma_tu_fibre_factor(Vf / 100.0, ar, members.fctm_mc2010(fcm), hooked=(fib == "H"))
+        o = members.punching_bazant_unified(4 * bc + np.pi * d, d, rho / 100.0, fcm, sigma_tu=st)
+        rp.append(Vexp * 1e3 / o["V_n"])
+    rp = np.array(rp)
+    put("buPmean", rp.mean())
+    put("buPcov", 100 * rp.std(ddof=1) / rp.mean(), "{:.1f}")
+    put("buPunsafe", int((rp < 1).sum()), "{:d}")
+    put("buPmin", rp.min())
+    for lang in ("en", "es"):
+        fig, ax = plt.subplots(1, 3, figsize=(9.6, 3.1))
+        ax[0].scatter(d_, r, s=8, color=P[0], alpha=0.6, edgecolors="none")
+        ax[0].set_xscale("log")
+        ax[0].set_title(T(lang, "(a) 393 RC beams", "(a) 393 vigas de HA"))
+        ax[1].scatter([q["d"] for q in rows], [q["ali"] for q in rows], s=22, color=P[1], edgecolors="white", linewidths=0.6)
+        ax[1].set_xscale("log")
+        ax[1].set_title(T(lang, "(b) 43 SFRC beams", "(b) 43 vigas de HRFA"))
+        from matplotlib.ticker import FixedLocator, FuncFormatter, NullFormatter
+        for a_ in ax[:2]:
+            a_.set_xlabel("$d$ [mm]")
+            a_.xaxis.set_major_locator(FixedLocator([200, 500, 1000]))
+            a_.xaxis.set_major_formatter(FuncFormatter(lambda v, _: f"{v:.0f}"))
+            a_.xaxis.set_minor_formatter(NullFormatter())
+        ax[2].scatter([row[4] for row in PDB], rp, s=14, color=P[2], edgecolors="white", linewidths=0.4)
+        ax[2].set_xlabel("$d$ [mm]")
+        ax[2].set_title(T(lang, "(c) 94 SFRC slabs (punching)", "(c) 94 losas de HRFA (punz.)"))
+        for a_ in ax:
+            a_.axhline(1.0, color="#52514e", lw=0.8)
+        ax[0].set_ylabel("$V_{exp}/V_n$")
+        fig.tight_layout()
+        save(fig, "fig_validation_bazant", lang)
+
+
 def example_members():
     """Worked examples of the member checks: N-M interaction, slender column, shear with stirrups
     and fibres, punching. Mechanical / fracture-mechanics result first, code reference second."""
@@ -1480,14 +1539,24 @@ def example_members():
                                       435.0, cot_theta=2.5)
     put("exShRefF", ref["V_Rd,F"] / 1e3, "{:.0f}")
     put("exShRefFS", ref["V_Rd"] / 1e3, "{:.0f}")
-    lawf = law_mc2010_frc_linear(fR1k, fR3k)
-    p0 = members.punching_csct_sfrc(rc=150.0, d=200.0, rs=1100.0, fc=fcm, fy=550.0, mR=150000.0)
-    p1 = members.punching_csct_sfrc(rc=150.0, d=200.0, rs=1100.0, fc=fcm, fy=550.0, mR=150000.0,
-                                    fibre_law=lawf)
-    put("exPunRC", p0["V_R"] / 1e3, "{:.0f}")
-    put("exPunF", p1["V_R"] / 1e3, "{:.0f}")
-    put("exPunFf", p1["V_Rf"] / 1e3, "{:.0f}")
-    put("exPunW", p1.get("w_crack", np.nan), "{:.2f}")
+    # Bazant unified approach (nominal, mean values): beam and punching examples
+    bu0 = members.shear_bazant_unified(300.0, 450.0, 0.012, fcm)
+    bu1 = members.shear_bazant_unified(300.0, 450.0, 0.012, fcm, sigma_tu=0.33 * fR3k)
+    bu2 = members.shear_bazant_unified(300.0, 450.0, 0.012, fcm, sigma_tu=0.33 * fR3k, rho_w=0.001)
+    put("exBuRC", bu0["V_n"] / 1e3, "{:.0f}")
+    put("exBuF", bu1["V_n"] / 1e3, "{:.0f}")
+    put("exBuFf", bu1["V_F"] / 1e3, "{:.0f}")
+    put("exBuFS", bu2["V_n"] / 1e3, "{:.0f}")
+    put("exBuc", bu0["c"], "{:.0f}")
+    put("exBugd", bu0["gamma_d"], "{:.2f}")
+    put("exBulam", bu1["lambda_F"], "{:.2f}")
+    b0 = 2 * np.pi * (150.0 + 100.0)
+    p0 = members.punching_bazant_unified(b0, 200.0, 0.008, fcm)
+    p1 = members.punching_bazant_unified(b0, 200.0, 0.008, fcm, sigma_tu=0.33 * fR3k)
+    put("exPunRC", p0["V_n"] / 1e3, "{:.0f}")
+    put("exPunF", p1["V_n"] / 1e3, "{:.0f}")
+    put("exPunFf", p1["V_F"] / 1e3, "{:.0f}")
+    put("exPunc", p0["c"], "{:.0f}")
     for lang in ("en", "es"):
         fig, ax = plt.subplots(1, 2, figsize=(7.4, 3.2))
         ax[0].plot(ia["M"] / 1e6, -ia["N"] / 1e3, color=P[0], lw=2,
@@ -1525,7 +1594,8 @@ if __name__ == "__main__":
              example5, example6, example7, fig_lefm, example4, validation_gao, validation_bosco, validation_carpinteri, validation_delarosa2025, validation_minelli,
              validation_cuenca_shear, validation_tiberti, sensitivity_s, compare_pcm, derived_numbers,
              validation_masm_cuenca, example_members, validation_cccm_rc,
-             validation_punching_mari2023, validation_columns_caballero]
+             validation_punching_mari2023, validation_columns_caballero,
+             validation_bazant_shear]
     if len(sys.argv) > 1:  # run selected steps only, keeping the other numbers already written
         import re as _re
         fn = os.path.join(TAB, "numbers.tex")

@@ -18,8 +18,8 @@ cross-checks (Annex L, MC2010, ACI 544.4R).
 - **Member checks (v1.1)**, each with a *primary* fracture-mechanics / mechanical result and a separate *code reference*:
   - bending + axial force: N–M interaction from the cohesive hinge (reference: Annex L block with N);
   - slender columns: single cohesive crack + second order, Annex L compression law of Ruiz et al. (2023) (reference: squash load, EC2 nominal curvature);
-  - shear: CCCM (Marí et al. 2014, with G_f size effect, stirrups, strut crushing) and MASM for SFRC (Marí et al. 2020) with σ_tu taken from the cohesive law Bažant's size-effect factor and a fibre-orientation bound on the fibre term (reference: MC2010 V_Rd,F + V_Rd,s, Annex L τ_Rd,cF, stirrup replacement);
-  - punching: Critical Shear Crack Theory (Muttoni 2008) with fibre bridging σ(ψd/6) from the cohesive law (Maya Duque et al. 2012), and the CCCM for SFRC slabs of Marí, Spinella & Rodríguez (2023) with σ_tu from the cohesive law (reference: EC2-2004, MC2010 Level II).
+  - shear: unified approach of Frosch, Yu, Cusatis & Bažant (2017) with Bažant's energetic size-effect law (ACI 446) plus cohesive fibre bridging with the same size effect (primary); CCCM (Marí et al. 2014, with G_f size effect, stirrups, strut crushing) and MASM for SFRC (Marí et al. 2020) with σ_tu taken from the cohesive law Bažant's size-effect factor and a fibre-orientation bound on the fibre term (reference: MC2010 V_Rd,F + V_Rd,s, Annex L τ_Rd,cF, stirrup replacement);
+  - punching: two-way unified approach with the energetic size effect and cohesive fibre bridging, and the CCCM for SFRC slabs of Marí, Spinella & Rodríguez (2023) with σ_tu from the cohesive law (reference: EC2-2004, MC2010 Level II).
 - Interfaces: Python library, **Streamlit app (ES/EN)**, MATLAB/Octave functions.
 
 ## Validation (reproducible with `python examples/generate_all.py`)
@@ -38,6 +38,9 @@ cross-checks (Annex L, MC2010, ACI 544.4R).
 | Same, λ_s + fibres aligned with the beam axis, η_or = sin θ_cr (default since 1.3, safe-side bound; orientation data of Cunha 2010) | 1.23 (CoV 26.0 %), min 0.81, 10/43 ratios < 1 |
 | 25 slender RC/SFRC columns under axial load (Caballero-Morrison et al. 2012, 2013), maximum moment with the cohesive hinge, no fitting | 1.00 (CoV 11.3 %) |
 | 393 RC beams without stirrups (Sarkhosh 2014 / ACI-DAfStb database), CCCM of Marí et al. 2014 | 1.05 (CoV 14.1 %), no bias with depth (EC2 1.14, CoV 15.0 %) |
+| 393 RC beams, unified approach of Bažant et al. (2017) with energetic size effect | 1.50 (CoV 15.5 %, nominal), no size bias (1.48 / 1.57 / 1.48), 2 of 393 < 1 |
+| 43 SFRC beams, Bažant unified approach + cohesive bridging (aligned) | 1.60 (CoV 22.9 %), none < 1 |
+| 94 SFRC punching tests (Marí et al. 2023), two-way Bažant + bridging (micromechanical σ_tu) | 1.79 (CoV 12.3 %), none < 1 |
 
 ## Quick start
 ```bash
@@ -79,8 +82,8 @@ docs/        manual (ES/EN), article (ES/EN), beamer (ES/EN), course (ES/EN), fi
 ## Limitations
 Hinge width s = h/2 (assumption); single dominant crack; rigid-plastic bond; monotonic loading; CoV of residual
 strengths in ECOV is a user input. Member models: the MASM with σ_tu = 0.33 f_R3 still overestimates beams with high f_R3
-(the σ_tu–f_R relation is not calibrated); the column (single-crack) and punching (CSCT + cohesive bridging) implementations are not yet
-validated against tests within FracHinge; partial factors of the mechanical shear models are not reliability-calibrated.
+(the σ_tu–f_R relation is not calibrated); the column (single-crack) model is not yet validated with eccentric tests, and punching with cohesive bridging is
+checked only with a micromechanical σ_tu (no fR in the available database); partial factors of the mechanical shear models are not reliability-calibrated.
 The software is an analysis/cross-check tool and **does not replace** the codes in force.
 
 ## Citation and licence

@@ -11,8 +11,9 @@ Fracture-mechanics / mechanical models (primary results of FracHinge)
 * Combined bending and axial force: N-M interaction obtained with the cohesive cracked hinge.
 * Slender columns: single-crack second-order model (central cohesive hinge + elastic segments, in the
   spirit of Ruiz Carmona et al. 2009); the ultimate load is the limit point of equilibrium.
-* Punching of slabs: Critical Shear Crack Theory (Muttoni 2008) with the fibre-bridging term of
-  Maya Duque et al. (2012); the bridging stress sigma(w) is read from the cohesive law.
+* Shear of beams and punching of slabs: unified approach of Frosch, Yu, Cusatis & Bazant (2017) with
+  the energetic size-effect law of Bazant (ACI 446), plus fibre bridging of the cohesive law across the
+  cracked part of the inclined crack, multiplied by the same size-effect law.
 
 Code formulas (reference only) are in :mod:`frachinge.codes`.
 Units: N, mm, MPa.
@@ -255,56 +256,6 @@ def column_buckling_hinge(section: Section, law: CohesiveLaw, comp, E: float, L:
 
 
 # ----------------------------------------------------------------------------------------------
-# Punching: Critical Shear Crack Theory with fibre bridging (Maya Duque et al. 2012)
-# ----------------------------------------------------------------------------------------------
-
-
-def punching_csct_sfrc(rc: float, d: float, rs: float, fc: float, fy: float, mR: float,
-                       rq: float | None = None, dg: float = 16.0, Es: float = 200000.0,
-                       fibre_law: CohesiveLaw | None = None, circular: bool = True) -> dict:
-    """Punching strength of an interior slab-column connection by the Critical Shear Crack Theory
-    (Muttoni 2008) with the fibre term of Maya Duque, Fernandez Ruiz, Muttoni & Foster (2012,
-    Eng. Struct. 40), mean values (gamma = 1):
-
-    failure criterion   V_Rc = 3/4 b0 d sqrt(fc) / (1 + 15 psi d / (dg0 + dg)),  dg0 = 16 mm
-    fibre bridging      V_Rf = A_p sigma_f(w = psi d / 6)
-    load-rotation       psi = 1.5 rs/d fy/Es (V / V_flex)^(3/2),  V_flex = 2 pi mR rs / (rq - rc)
-
-    The bridging stress sigma_f(w) is read from the fibre cohesive law (FracHinge input) instead of
-    the Variable Engagement Model used in the source. b0 is the control perimeter at d/2 from the
-    column face, A_p the horizontal projection of a 45-degree failure surface.
-    Units: N, mm, MPa; mR in N mm/mm (per unit width)."""
-    rq = rq if rq is not None else rs  # load introduced at the contraflexure radius by default
-    if circular:
-        b0 = 2.0 * math.pi * (rc + 0.5 * d)
-        Ap = math.pi * ((rc + d) ** 2 - rc ** 2)
-    else:  # square column of side 2 rc
-        b0 = 4.0 * 2.0 * rc + math.pi * d
-        Ap = (2.0 * rc + 2.0 * d) ** 2 - (2.0 * rc) ** 2 - (4.0 - math.pi) * d ** 2
-    Vflex = 2.0 * math.pi * mR * rs / max(rq - rc, 1e-9)
-
-    def VR(psi):
-        Vc = 0.75 * b0 * d * math.sqrt(fc) / (1.0 + 15.0 * psi * d / (16.0 + dg))
-        Vf = float(fibre_law.sigma(np.array([psi * d / 6.0]))[0]) * Ap if fibre_law is not None else 0.0
-        return Vc, Vf
-
-    def VE(psi):  # load-rotation relationship (inverse form)
-        return Vflex * (psi * d * Es / (1.5 * rs * fy)) ** (2.0 / 3.0)
-
-    from scipy.optimize import brentq
-    g = lambda p: sum(VR(p)) - VE(p)
-    psi_hi = 1.5 * rs / d * fy / Es  # rotation at V = V_flex
-    if g(psi_hi) > 0:  # punching not reached before flexural capacity
-        Vc, Vf = VR(psi_hi)
-        return {"psi": psi_hi, "V_R": Vflex, "V_Rc": Vc, "V_Rf": Vf, "V_flex": Vflex, "b0": b0,
-                "A_p": Ap, "governing": "flexure (V_flex)"}
-    psi = brentq(g, 1e-9, psi_hi)
-    Vc, Vf = VR(psi)
-    return {"psi": psi, "V_R": Vc + Vf, "V_Rc": Vc, "V_Rf": Vf, "V_flex": Vflex, "b0": b0, "A_p": Ap,
-            "w_crack": psi * d / 6.0, "governing": "punching"}
-
-
-# ----------------------------------------------------------------------------------------------
 # Punching: CCCM for SFRC slabs (Mari, Spinella & Rodriguez 2023) -- second mechanical model
 # ----------------------------------------------------------------------------------------------
 
@@ -362,3 +313,75 @@ def punching_cccm_sfrc(rcol: float, d: float, h: float, fcm: float, rho_l: float
         fck = fcm - 8.0
         out["V_y"] = 2.0 * math.pi * rho_l * fy * d ** 2 * (1.0 - rho_l * fy / (2.0 * fck))
     return out
+
+
+# ----------------------------------------------------------------------------------------------
+# Shear and punching: unified approach of Bazant et al. (energetic size-effect law)
+# ----------------------------------------------------------------------------------------------
+
+SQRT_PSI = 1.0 / 12.0416  # sqrt(f'c [psi]) expressed in MPa: k sqrt(psi) = (k/12.04) sqrt(MPa)
+
+
+def neutral_axis_elastic(rho_l: float, fc: float, Es: float = 200000.0) -> float:
+    """Elastic cracked-section neutral-axis ratio k = c/d = sqrt(2 rho n + (rho n)^2) - rho n with
+    n = Es/Ec, Ec = 4700 sqrt(fc) (Frosch et al. 2017, Eq. 3)."""
+    rn = rho_l * Es / (4700.0 * math.sqrt(fc))
+    return math.sqrt(2.0 * rn + rn * rn) - rn
+
+
+def size_factor_unified(d: float, stirrups: bool = False) -> float:
+    """Size-effect factor of the unified approach (Frosch, Yu, Cusatis & Bazant 2017, Eqs. 6-7), based
+    on the energetic size-effect law proposed by ACI Committee 446:
+    gamma_d = 1.4 / sqrt(1 + d/d0) <= 1, d0 = 10 in (254 mm) without minimum stirrups and
+    100 in (2540 mm) with A_v >= A_v,min; gamma_d = 1 for d < 10 in (or d < 100 in with stirrups)."""
+    d0 = 2540.0 if stirrups else 254.0
+    if d < d0:
+        return 1.0
+    return min(1.4 / math.sqrt(1.0 + d / d0), 1.0)
+
+
+def _fibre_bridging(b: float, d: float, c: float, sigma_tu: float, orientation: str, cot_theta: float = 1.0):
+    """Vertical resultant of the cohesive bridging stress on the cracked part (d - c) of an inclined
+    crack: V_F = eta_or lambda_s sigma_tu b (d - c) cot(theta) (equilibrium of the crack face,
+    theta = 45 deg). lambda_s: Bazant energetic size-effect law (d0 = 254 mm); eta_or = sin(theta)
+    for fibres aligned with the member axis (or lying in the slab plane), 1 for isotropic fibres."""
+    lam = size_factor_bazant(d, 254.0)
+    eta = 1.0 / math.sqrt(1.0 + cot_theta ** 2) if orientation == "aligned" else 1.0
+    return eta * lam * sigma_tu * b * max(d - c, 0.0) * cot_theta, lam, eta
+
+
+def shear_bazant_unified(b: float, d: float, rho_l: float, fc: float, sigma_tu: float = 0.0,
+                         rho_w: float = 0.0, fyw: float = 500.0, stirrups_min: bool = False,
+                         orientation: str = "aligned", Es: float = 200000.0, phi: float = 1.0) -> dict:
+    """Shear strength of a beam (RC, SFRC or both) with the unified approach of Frosch, Yu, Cusatis &
+    Bazant (2017): V_c = 5 sqrt(f'c) b_w c gamma_d (psi, in) = 0.415 sqrt(fc) b c gamma_d (MPa, mm),
+    c = elastic cracked neutral-axis depth, gamma_d from the energetic size-effect law; stirrups
+    V_s = A_v f_y d / s; upper limit V <= 5 V_c (Eq. 9). FracHinge adds the fibre bridging term of
+    the cohesive law (see _fibre_bridging). The concrete term is a nominal (lower-bound) expression;
+    phi = 0.75 gives the ACI design format."""
+    k = neutral_axis_elastic(rho_l, fc, Es)
+    c = k * d
+    gd = size_factor_unified(d, stirrups_min)
+    Vc = 5.0 * SQRT_PSI * math.sqrt(fc) * b * c * gd
+    VF, lam, eta = _fibre_bridging(b, d, c, sigma_tu, orientation)
+    Vs = rho_w * b * fyw * d
+    Vn = min(Vc + VF + Vs, 5.0 * (Vc + VF))
+    return {"c": c, "k": k, "gamma_d": gd, "lambda_F": lam, "eta_orientation": eta, "V_c": Vc,
+            "V_F": VF, "V_s": Vs, "V_n": Vn, "V_Rd": phi * Vn,
+            "model": "Unified approach (Frosch, Yu, Cusatis & Bazant 2017) + cohesive fibre bridging"}
+
+
+def punching_bazant_unified(b0: float, d: float, rho_l: float, fc: float, sigma_tu: float = 0.0,
+                            orientation: str = "aligned", Es: float = 200000.0, phi: float = 1.0) -> dict:
+    """Two-way (punching) shear strength with the unified approach: V_c = 10 sqrt(f'c) b0 c (psi, in)
+    = 0.83 sqrt(fc) b0 c (MPa, mm) (Frosch et al. 2017; ACI 440.1R-15), b0 = control perimeter at d/2.
+    FracHinge multiplies it by the energetic size-effect factor gamma_d (punching size effect verified
+    by Bazant & Cao 1987, ACI 446 1992) and adds cohesive fibre bridging on b0 (d - c)."""
+    k = neutral_axis_elastic(rho_l, fc, Es)
+    c = k * d
+    gd = size_factor_unified(d, False)
+    Vc = 10.0 * SQRT_PSI * math.sqrt(fc) * b0 * c * gd
+    VF, lam, eta = _fibre_bridging(b0, d, c, sigma_tu, orientation)
+    Vn = Vc + VF
+    return {"c": c, "gamma_d": gd, "lambda_F": lam, "eta_orientation": eta, "V_c": Vc, "V_F": VF,
+            "V_n": Vn, "V_Rd": phi * Vn}
