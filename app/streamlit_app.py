@@ -22,12 +22,15 @@ import streamlit as st
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from frachinge import codes  # noqa: E402
-from frachinge.design import DesignInput, run_design  # noqa: E402
+from frachinge import codes, members  # noqa: E402
+from frachinge.design import DesignInput, build_hinge, run_design  # noqa: E402
+from dataclasses import replace as dc_replace  # noqa: E402
 from frachinge.materials import (compression_elastic_plastic, ecm_from_fcm, fctm_from_fck,  # noqa: E402
                                  gf_mc2010, law_annexL, law_envelope, law_mc2010_frc_linear,
                                  law_mc2010_plain, characteristic_length, compression_ec2)
 from frachinge.hinge import CrackedHinge, Section, en14651_prism  # noqa: E402
+from frachinge.materials import (Rebar, Steel, compression_annexL, law_linear_softening,  # noqa: E402
+                                 law_mc2010_rigid_plastic)
 from frachinge.inverse import identify_fct, identify_law  # noqa: E402
 
 PALETTE = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300"]
@@ -69,6 +72,7 @@ fyk = sb.number_input("fyk [MPa]", 200.0, 700.0, 500.0, 10.0)
 fuk = sb.number_input("fuk [MPa]", 200.0, 800.0, 540.0, 10.0)
 sb.header(t("Acciones", "Actions"))
 MEd = sb.number_input("M_Ed [kNm]", 0.0, 1e5, 100.0, 1.0)
+NEd = sb.number_input(t("N_Ed [kN] (compresión +)", "N_Ed [kN] (compression +)"), -1e4, 1e5, 0.0, 10.0)
 Mser = sb.number_input("M_ser [kNm]", 0.0, 1e5, 70.0, 1.0)
 wlim = sb.number_input("w_lim [mm]", 0.05, 1.0, 0.3, 0.05)
 VfR = sb.number_input(t("CoV supuesto de fR (ECOV)", "Assumed CoV of fR (ECOV)"), 0.05, 0.5, 0.20, 0.01)
@@ -76,12 +80,18 @@ VfR = sb.number_input(t("CoV supuesto de fR (ECOV)", "Assumed CoV of fR (ECOV)")
 As = nbars * np.pi * phi ** 2 / 4.0
 inp = DesignInput(b=b, h=h, fck=fck, fR1k=fR1k, fR3k=fR3k, kO=kO, law_model=law_model,
                   bars=[(cover_y, As, phi)] if nbars > 0 else [], fyk=fyk, fuk=fuk,
-                  M_Ed=MEd * 1e6, M_ser=Mser * 1e6, w_lim=wlim, V_fR=VfR)
+                  M_Ed=MEd * 1e6, N_Ed=NEd * 1e3, M_ser=Mser * 1e6, w_lim=wlim, V_fR=VfR)
 
-tabs = st.tabs([t("Materiales", "Materials"), t("Sección / ELU-ELS", "Section / ULS-SLS"),
-                t("Normativa", "Codes"), t("Análisis inverso EN 14651", "EN 14651 inverse analysis"),
-                t("Efecto tamaño", "Size effect"), t("Informe", "Report"),
-                t("Validación experimental", "Experimental validation")])
+st.info(t("**Mecánica de fractura (MF)** = resultado principal de FracHinge. "
+          "**Ref. normativa** = fórmulas de código mostradas solo como contraste.",
+          "**Fracture mechanics (FM)** = FracHinge primary result. "
+          "**Code ref.** = code formulas shown for comparison only."))
+tabs = st.tabs([t("MF · Materiales", "FM · Materials"), t("MF · Flexión + axil (ELU/ELS)", "FM · Bending + axial (ULS/SLS)"),
+                t("MF · Cortante", "FM · Shear"), t("MF · Pilares", "FM · Columns"),
+                t("MF · Punzonamiento", "FM · Punching"),
+                t("MF · Análisis inverso EN 14651", "FM · EN 14651 inverse analysis"),
+                t("MF · Efecto tamaño", "FM · Size effect"), t("Validación experimental", "Experimental validation"),
+                t("Ref. normativa", "Code ref."), t("Informe", "Report")])
 
 fcm = fck + 8.0
 E = ecm_from_fcm(fcm)
@@ -122,7 +132,7 @@ with tabs[1]:
     res = st.session_state["res"]
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("M_Rd (hinge) [kNm]", f"{res['M_Rd_hinge'] / 1e6:.1f}")
-    c2.metric(t("M_Rd Anejo L [kNm]", "M_Rd Annex L [kNm]"), f"{res['annexL_uls']['M_Rd'] / 1e6:.1f}")
+    c2.metric(t("M_Rd Anejo L (ref.) [kNm]", "M_Rd Annex L (ref.) [kNm]"), f"{res['annexL_uls']['M_Rd'] / 1e6:.1f}")
     c3.metric("ECOV R_d [kNm]", f"{res['ecov']['R_d'] / 1e6:.1f}")
     c4.metric(t("Ductilidad M_post/M_cr", "Ductility M_post/M_cr"), f"{res['ductility_ratio']:.2f}")
     if "ULS_ok" in res:
@@ -151,8 +161,37 @@ with tabs[1]:
     st.pyplot(fig)
     st.caption(t("Fallo (leyes de cálculo): ", "Failure (design laws): ") + str(res["failure_design"]))
 
-with tabs[2]:
-    st.subheader(t("Comprobaciones normativas de referencia", "Reference code checks"))
+    st.markdown("---")
+    st.subheader(t("Diagrama de interacción N–M", "N–M interaction diagram"))
+    st.caption(t("Rótula cohesiva con las leyes de cálculo (resultado principal) frente al bloque rígido-plástico "
+                 "del Anejo L con N (referencia). Se usa la armadura de la barra lateral.",
+                 "Cohesive hinge with design laws (primary result) versus the rigid-plastic Annex L block with N "
+                 "(reference). The sidebar reinforcement is used."))
+    if st.button(t("Calcular diagrama N–M", "Compute N–M diagram")):
+        with st.spinner("N–M..."):
+            hgd = build_hinge(inp, "design", res["kappa_G"])
+            fcd = codes.eta_cc(fck) * fck / 1.5
+            Ns = np.linspace(-0.95 * fcd * b * h, 0.0, 12)
+            ia = members.interaction_hinge(hgd.section, hgd.law, hgd.comp, hgd.E, rebars=hgd.rebars,
+                                           N_values=Ns, n_layers=150, n=60)
+            fFtud = kO * res["kappa_G"] * 0.33 * fR3k / 1.5 if use_f else 0.0
+            lay = [(h - y, A, fyk / 1.15) for (y, A, ph) in inp.bars]
+            ra = codes.interaction_annexL(b, h, fck, fFtud, lay, gamma_c=1.5, N_values=Ns)
+        fig, ax = plt.subplots(figsize=(5.5, 3.6))
+        ax.plot(ia["M"] / 1e6, -ia["N"] / 1e3, color=PALETTE[0], lw=2, label=t("MF: rótula cohesiva", "FM: cohesive hinge"))
+        ax.plot(ra["M"] / 1e6, -ra["N"] / 1e3, "--", color=PALETTE[1], lw=2, label=t("Ref.: Anejo L", "Ref.: Annex L"))
+        if MEd > 0:
+            ax.plot([MEd], [NEd], "k*", ms=10, label="(M_Ed, N_Ed)")
+        ax.set_xlabel("M_Rd [kNm]")
+        ax.set_ylabel(t("N (compresión) [kN]", "N (compression) [kN]"))
+        ax.grid(alpha=0.3)
+        ax.legend(frameon=False)
+        st.pyplot(fig)
+        st.dataframe(pd.DataFrame({"N [kN]": -ia["N"] / 1e3, "M_Rd FM [kNm]": ia["M"] / 1e6,
+                                   "M_Rd ref [kNm]": ra["M"] / 1e6}).round(1), width="stretch")
+
+with tabs[8]:
+    st.subheader(t("Comprobaciones normativas (solo referencia)", "Code checks (reference only)"))
     d = h - cover_y
     rows = []
     if use_f:
@@ -173,7 +212,7 @@ with tabs[2]:
               "Note: L.12.2.1 forbids replacing the minimum longitudinal reinforcement of beams by fibres; "
               "in slabs L.12.3.1 limits it to kAS·As,min (kAS = 0.5)."))
 
-with tabs[3]:
+with tabs[5]:
     st.subheader(t("Identificación de σ(w) a partir de fR,j", "Identification of σ(w) from fR,j"))
     c = st.columns(6)
     FL = c[0].number_input("F_L [kN]", 1.0, 60.0, 14.6)
@@ -207,7 +246,7 @@ with tabs[3]:
         csv = pd.DataFrame({"w_mm": idr["law"].w, "sigma_MPa": idr["law"].s}).to_csv(index=False)
         st.download_button(t("Descargar ley σ(w) (CSV)", "Download σ(w) law (CSV)"), csv, "sigma_w.csv")
 
-with tabs[4]:
+with tabs[6]:
     st.subheader(t("Resistencia a flexotracción y tamaño", "Flexural strength and size"))
     hs = st.multiselect("h [mm]", [50, 100, 200, 400, 800, 1600], [100, 200, 400, 800])
     if st.button(t("Calcular efecto tamaño", "Compute size effect")):
@@ -220,7 +259,7 @@ with tabs[4]:
                         codes.fct_flexural_mc2010(fctm, hh) / fctm])
         st.table(pd.DataFrame(out, columns=["h", "h/lch", "fct,fl/fct (hinge)", "MC2010 (5.1-8)"]))
 
-with tabs[5]:
+with tabs[9]:
     res = st.session_state.get("res")
     if res:
         rep = {k: v for k, v in res.items() if k not in ("responses",)}
@@ -236,7 +275,7 @@ with tabs[5]:
                  r"\bottomrule", r"\end{tabular}"]
         st.download_button(t("Descargar tabla LaTeX", "Download LaTeX table"), "\n".join(lines), "frachinge_table.tex")
 
-with tabs[6]:
+with tabs[7]:
     st.subheader(t("Validación con ensayos publicados", "Validation against published tests"))
     ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     sys.path.insert(0, os.path.join(ROOT, "examples"))
@@ -265,11 +304,11 @@ with tabs[6]:
         c1, c2, c3 = st.columns(3)
         vf = c1.selectbox(t("Fibras [kg/m³]", "Fibres [kg/m³]"), [0, 10, 20, 40], index=1)
         bars = c2.selectbox(t("Armadura", "Bars"), list(CARP.BARS.keys()), index=2)
-        inp = c3.radio(t("Resistencia a tracción", "Tensile strength"),
+        inp_src = c3.radio(t("Resistencia a tracción", "Tensile strength"),
                        ["B: ft Table 3 (MC90)", "A: ft Table 8 (notched flexural)"])
         if st.button(t("Recalcular la viga", "Recompute beam")):
             m = CARP.MAT[vf]
-            ft, GFv = (m["ft3"], m["GF3"]) if inp.startswith("B") else (m["ft8"], m["GF8"])
+            ft, GFv = (m["ft3"], m["GF3"]) if inp_src.startswith("B") else (m["ft8"], m["GF8"])
             n, phi, fy, fu = CARP.BARS[bars]
             rb = []
             if n:
@@ -295,7 +334,147 @@ with tabs[6]:
             st.metric(t("Carga máxima calculada", "Computed peak load"), f"{P.max():.1f} kN",
                       f"{100 * (P.max() / pe - 1):+.0f} % vs test")
 
+# ----------------------------------------------------------------------------- shear
+with tabs[2]:
+    st.subheader(t("Cortante en vigas (con o sin cercos, con o sin fibras)", "Beam shear (with/without stirrups and fibres)"))
+    c = st.columns(4)
+    d_s = c[0].number_input("d [mm]", 50.0, 3000.0, float(h - cover_y), 5.0, key="ds")
+    a_s = c[1].number_input(t("a (luz de cortante) [mm]", "a (shear span) [mm]"), 100.0, 20000.0, float(3 * (h - cover_y)), 10.0)
+    rho_w = c[2].number_input(t("ρw cercos [%]", "ρw stirrups [%]"), 0.0, 2.0, 0.0, 0.01) / 100.0
+    fywk = c[3].number_input("fywk [MPa]", 200.0, 700.0, 500.0, 10.0)
+    VEd = st.number_input("V_Ed [kN]", 0.0, 1e5, 150.0, 5.0)
+    rho_l = max(As / (b * d_s), 1e-4)
+    kG = st.session_state["res"]["kappa_G"] if "res" in st.session_state else 1.0
+    fFtuk = kO * kG * 0.33 * fR3k if use_f else 0.0
+    fFtud = fFtuk / 1.5
+    cfm, cref = st.columns(2)
+    with cfm:
+        st.markdown(t("#### MF · Modelo mecánico (resultado principal)", "#### FM · Mechanical model (primary result)"))
+        r = members.shear_masm_design(b, d_s, a_s, rho_l, fck, fFtud, rho_w=rho_w, fywd=fywk / 1.15)
+        st.write(r["model"])
+        comp_rows = [[k, f"{r[k] / 1e3:.1f}"] for k in ("V_c", "V_w", "V_l", "V_s", "V_u_concrete_fibres") if k in r]
+        comp_rows += [[t("Aplastamiento de bielas V_max", "Strut crushing V_max"), f"{r['V_max_strut'] / 1e3:.1f}"],
+                      ["V_Rd [kN]", f"{r['V_Rd'] / 1e3:.1f}"], ["x/d", f"{r['x_d']:.3f}"]]
+        st.table(pd.DataFrame(comp_rows, columns=[t("Componente", "Component"), "kN"]))
+        (st.success if r["V_Rd"] >= VEd * 1e3 else st.error)(f"V_Ed / V_Rd = {VEd * 1e3 / r['V_Rd']:.2f}")
+        if use_f:
+            st.warning(t("Validación (Cuenca et al. 2018, 43 vigas sin cercos): media Vexp/Vmasm = 0,91, CoV 31 %; "
+                         "sobrestima la resistencia de vigas con d ≥ 900 mm (media 0,75). Contrástese con la referencia.",
+                         "Validation (Cuenca et al. 2018, 43 beams without stirrups): mean Vexp/Vmasm = 0.91, CoV 31 %; "
+                         "it overestimates beams with d ≥ 900 mm (mean 0.75). Check against the code reference."))
+        st.caption(t("Coeficientes parciales no calibrados por fiabilidad (Marí et al. 2020).",
+                     "Partial factors not calibrated by reliability analysis (Marí et al. 2020)."))
+    with cref:
+        st.markdown(t("#### Ref. normativa (solo contraste)", "#### Code ref. (comparison only)"))
+        fctk = 0.7 * fctm
+        ref = codes.VRd_frc_with_stirrups(b, d_s, rho_l, fck, fFtuk, fctk, rho_w * b, fywk / 1.15)
+        rows = [["MC2010 V_Rd,F (7.7-5) [kN]", f"{ref['V_Rd,F'] / 1e3:.1f}"],
+                ["V_Rd,s (cot θ = 2.5) [kN]", f"{ref['V_Rd,s'] / 1e3:.1f}"],
+                ["V_Rd,max EC2-2004 (6.9) [kN]", f"{ref['V_Rd,max'] / 1e3:.1f}"],
+                ["MC2010 V_Rd = V_Rd,F + V_Rd,s [kN]", f"{ref['V_Rd'] / 1e3:.1f}"]]
+        if use_f:
+            tau, eta = codes.tau_RdcF_annexL(rho_l, fck, 0.9 * d_s, fFtud, fFtuk)
+            rows.append([t("Anejo L τRd,cF·b·z [kN]", "Annex L τRd,cF·b·z [kN]"), f"{tau * b * 0.9 * d_s / 1e3:.1f}"])
+            rows.append([t("Sustitución de cercos mínimos", "Minimum-stirrup replacement"),
+                         str(codes.annexL_stirrup_replacement_ok(fFtuk, fck))])
+        st.table(pd.DataFrame(rows, columns=[t("Magnitud", "Quantity"), t("Valor", "Value")]))
+
+# ----------------------------------------------------------------------------- columns
+with tabs[3]:
+    st.subheader(t("Pilares: compresión centrada, N–M y esbeltez", "Columns: centred compression, N–M and slenderness"))
+    c = st.columns(5)
+    Lc = c[0].number_input(t("Longitud de pandeo L [mm]", "Buckling length L [mm]"), 500.0, 30000.0, 4000.0, 100.0)
+    e0 = c[1].number_input("e0 [mm]", 0.0, 1000.0, 20.0, 1.0)
+    nb_c = c[2].number_input(t("Barras por cara", "Bars per face"), 0, 20, 2)
+    phi_c = c[3].number_input("ϕ [mm] ", 6.0, 40.0, 16.0, 1.0)
+    cov_c = c[4].number_input(t("Recubr. mecánico [mm]", "Bar cover to centroid [mm]"), 10.0, 200.0, 40.0, 1.0)
+    NEd_c = st.number_input("N_Ed [kN] ", 0.0, 1e5, 800.0, 10.0)
+    Af = nb_c * np.pi * phi_c ** 2 / 4.0
+    inp_c = dc_replace(inp, bars=[(cov_c, Af, phi_c), (h - cov_c, Af, phi_c)] if nb_c > 0 else [])
+    level = st.radio(t("Nivel de las leyes", "Law level"), ["design", "mean"], horizontal=True,
+                     help=t("design: leyes de cálculo (γ); mean: predicción de ensayo",
+                            "design: design laws (γ); mean: test prediction"))
+    if st.button(t("Calcular pilar", "Compute column")):
+        hgc = build_hinge(inp_c, level, 1.0)
+        fc_lev = hgc.comp.fc
+        with st.spinner(t("Modelo de fisura única con segundo orden...", "Single-crack second-order model...")):
+            cb = members.column_buckling_hinge(hgc.section, hgc.law, hgc.comp, hgc.E, Lc, e0, rebars=hgc.rebars,
+                                               n_layers=120, n=50,
+                                               N_grid=np.linspace(0.04, 1.0, 25) * fc_lev * b * h)
+        cfm, cref = st.columns(2)
+        with cfm:
+            st.markdown(t("#### MF · Rótula cohesiva + 2º orden (principal)", "#### FM · Cohesive hinge + 2nd order (primary)"))
+            st.metric("N_u [kN]", f"{cb['N_u'] / 1e3:.0f}")
+            st.write(f"N_Euler = {cb['N_euler'] / 1e3:.0f} kN")
+            (st.success if cb["N_u"] >= NEd_c * 1e3 else st.error)(f"N_Ed / N_u = {NEd_c * 1e3 / max(cb['N_u'], 1):.2f}")
+            st.caption(t("Hipótesis: una sola fisura a media altura, tramos no fisurados elásticos (en la línea de "
+                         "Ruiz Carmona et al. 2009). Modelo sin validar experimentalmente en FracHinge; no sustituye "
+                         "el método general de EN 1992.",
+                         "Assumptions: single crack at mid-height, elastic uncracked segments (in the line of "
+                         "Ruiz Carmona et al. 2009). Not experimentally validated in FracHinge; not a substitute for "
+                         "the EN 1992 general method."))
+        with cref:
+            st.markdown(t("#### Ref. normativa (solo contraste)", "#### Code ref. (comparison only)"))
+            Ac = b * h
+            NRd = codes.column_axial_capacity(Ac, 2 * Af, fck, fyk)
+            nc = codes.nominal_curvature_moment(NEd_c * 1e3, NEd_c * 1e3 * e0, Lc, h - cov_c, h, Ac, 2 * Af, fck, fyk)
+            try:
+                fFtud = kO * 0.33 * fR3k / 1.5 if use_f else 0.0
+                MRd = codes.uls_bending_annexL(b, h, fck, fFtud, [(h - cov_c, Af, fyk / 1.15), (cov_c, Af, fyk / 1.15)],
+                                               1.5, N_Ed=-NEd_c * 1e3)["M_Rd"]
+            except ValueError:
+                MRd = float("nan")
+            st.table(pd.DataFrame([[t("N_Rd compresión centrada [kN]", "N_Rd centred compression [kN]"), f"{NRd / 1e3:.0f}"],
+                                   ["e2 (EC2-2004 5.8.8) [mm]", f"{nc['e2']:.1f}"],
+                                   ["M_Ed,2nd [kNm]", f"{nc['M_Ed'] / 1e6:.1f}"],
+                                   [t("M_Rd(N_Ed) Anejo L [kNm]", "M_Rd(N_Ed) Annex L [kNm]"), f"{MRd / 1e6:.1f}"]],
+                                  columns=[t("Magnitud", "Quantity"), t("Valor", "Value")]))
+
+# ----------------------------------------------------------------------------- punching
+with tabs[4]:
+    st.subheader(t("Punzonamiento de losas (pilar interior)", "Slab punching (interior column)"))
+    c = st.columns(4)
+    d_p = c[0].number_input("d [mm] ", 50.0, 1000.0, 200.0, 5.0)
+    rc = c[1].number_input(t("Radio (o semilado) del pilar [mm]", "Column radius (or half side) [mm]"), 50.0, 1000.0, 150.0, 5.0)
+    rs = c[2].number_input("r_s [mm]", 200.0, 10000.0, 1100.0, 10.0,
+                           help=t("Distancia al punto de momento nulo (≈0,22 L)", "Distance to zero moment (≈0.22 L)"))
+    rho_p = c[3].number_input(t("ρ flexión [%]", "ρ flexural [%]"), 0.1, 3.0, 0.8, 0.05) / 100.0
+    c2_ = st.columns(3)
+    dg = c2_[0].number_input("dg [mm]", 4.0, 32.0, 16.0, 1.0)
+    circ = c2_[1].checkbox(t("Pilar circular", "Circular column"), False)
+    VEdp = c2_[2].number_input("V_Ed [kN] ", 0.0, 1e5, 500.0, 10.0)
+    fy_m = 1.1 * fyk
+    mR = rho_p * fy_m * d_p ** 2 * (1.0 - rho_p * fy_m / (2.0 * fcm))
+    cfm, cref = st.columns(2)
+    lawf = None
+    if use_f:
+        lawf = law_mc2010_frc_linear(fR1k, fR3k) if law_model == "mc2010" else law_annexL(fR1k, fR3k, fctm, E, include_matrix=False)
+    with cfm:
+        st.markdown(t("#### MF · CSCT + puenteo cohesivo (principal)", "#### FM · CSCT + cohesive bridging (primary)"))
+        pr = members.punching_csct_sfrc(rc, d_p, rs, fcm, fy_m, mR, dg=dg, fibre_law=lawf, circular=circ)
+        st.table(pd.DataFrame([["ψ [mrad]", f"{1000 * pr['psi']:.2f}"],
+                               ["w = ψd/6 [mm]", f"{pr['psi'] * d_p / 6:.3f}"],
+                               ["V_R,c [kN]", f"{pr['V_Rc'] / 1e3:.0f}"], ["V_R,f [kN]", f"{pr['V_Rf'] / 1e3:.0f}"],
+                               ["V_flex [kN]", f"{pr['V_flex'] / 1e3:.0f}"], ["V_R [kN]", f"{pr['V_R'] / 1e3:.0f}"],
+                               [t("Modo", "Mode"), pr["governing"]]], columns=[t("Magnitud", "Quantity"), t("Valor", "Value")]))
+        st.caption(t("Valores medios (γ = 1). Muttoni (2008) + Maya Duque et al. (2012), σ(w) de la ley cohesiva. "
+                     "Para cálculo divida por un coeficiente global o use la referencia normativa.",
+                     "Mean values (γ = 1). Muttoni (2008) + Maya Duque et al. (2012), σ(w) from the cohesive law. "
+                     "For design apply a global factor or use the code reference."))
+        (st.success if pr["V_R"] >= VEdp * 1e3 else st.error)(f"V_Ed / V_R = {VEdp * 1e3 / pr['V_R']:.2f}")
+    with cref:
+        st.markdown(t("#### Ref. normativa (solo contraste)", "#### Code ref. (comparison only)"))
+        if circ:
+            b0, u1 = 2 * np.pi * (rc + d_p / 2), 2 * np.pi * (rc + 2 * d_p)
+        else:
+            b0, u1 = 8 * rc + np.pi * d_p, 8 * rc + 4 * np.pi * d_p
+        mc = codes.punching_mc2010_level2(b0, d_p, rs, d_p, fck, fyk / 1.15, 1.0, dg)
+        st.table(pd.DataFrame([["EC2-2004 (6.47) V_Rd,c [kN]", f"{codes.punching_ec2_2004(u1, d_p, rho_p, fck) / 1e3:.0f}"],
+                               ["MC2010 Level II V_Rd,c (m_Ed = m_Rd) [kN]", f"{mc['V_Rd,c'] / 1e3:.0f}"]],
+                              columns=[t("Magnitud", "Quantity"), t("Valor", "Value")]))
+
+
 st.sidebar.markdown("---")
 st.sidebar.warning(t("Herramienta de apoyo al cálculo: no sustituye la comprobación del proyectista conforme a EN 1992-1-1:2023.", "Design-support tool: it does not replace the designer's verification according to EN 1992-1-1:2023."))
-st.sidebar.caption("FracHinge v1.0.0 · MIT · " + t("Ver docs/ para manual, artículo y curso.",
+st.sidebar.caption("FracHinge v1.1.0 · MIT · " + t("Ver docs/ para manual, artículo y curso.",
                                                   "See docs/ for manual, article and course."))

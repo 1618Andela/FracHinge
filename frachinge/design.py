@@ -48,6 +48,7 @@ class DesignInput:
     gamma_SF: float = 1.5
     law_model: str = "annexL"  # "annexL" or "mc2010"
     M_Ed: float = 0.0  # N mm
+    N_Ed: float = 0.0  # N, axial force acting with M_Ed (COMPRESSION POSITIVE)
     M_ser: float = 0.0  # N mm
     w_lim: float = 0.3  # mm
     V_fR: float = 0.20  # assumed CoV of residual strengths, for mean values (ECOV)
@@ -137,7 +138,7 @@ def run_design(inp: DesignInput, theta_max: float = 0.06, n: int = 160) -> dict:
     res = {}
     for level in ("design", "char", "mean"):
         hg = build_hinge(inp, level, kG)
-        r = hg.response(theta_max=theta_max, n=n)
+        r = hg.response(theta_max=theta_max, n=n, N_ext=-inp.N_Ed)
         res[level] = r
     out["responses"] = res
     rd = res["design"]
@@ -170,7 +171,11 @@ def run_design(inp: DesignInput, theta_max: float = 0.06, n: int = 160) -> dict:
     # code cross-check (Annex L rigid plastic)
     fFtud = inp.kO * kG * 0.33 * inp.fR3k / inp.gamma_SF if inp.fR3k > 0 else 0.0
     layers = [(inp.h - y, As, inp.fyk / inp.gamma_s) for (y, As, phi) in inp.bars]
-    out["annexL_uls"] = codes.uls_bending_annexL(inp.b, inp.h, inp.fck, fFtud, layers, inp.gamma_c)
+    try:
+        out["annexL_uls"] = codes.uls_bending_annexL(inp.b, inp.h, inp.fck, fFtud, layers, inp.gamma_c,
+                                                     N_Ed=-inp.N_Ed)
+    except ValueError:  # neutral axis outside the section (high compression)
+        out["annexL_uls"] = {"M_Rd": float("nan"), "governing": "N outside the bending domain"}
     out["fracture"] = {"lch": characteristic_length(Ecm, GF, fctm), "GF": GF,
                        "h_over_lch": inp.h / characteristic_length(Ecm, GF, fctm)}
     if inp.M_Ed > 0:

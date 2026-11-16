@@ -246,3 +246,103 @@ def henager_doherty(b, h, d, As, fy, fc, lf, df, Vf_percent, Fbe=1.0, tau_d=2.3,
     e = (eps_f + eps_cu) * c / eps_cu
     Mn = As * fy * (d - a / 2.0) + sigma_t * b * max(h - e, 0.0) * (h / 2.0 + e / 2.0 - a / 2.0)
     return {"Mn": Mn, "c": c, "a": a, "e": e, "sigma_t": sigma_t}
+
+
+# ------------------------------------------------------------------------------------------
+# Reference code checks added in 1.1 (shear with stirrups, struts, columns, punching).
+# They are REFERENCE values only; the primary FracHinge results are the mechanical /
+# fracture-mechanics models of frachinge.members.
+# ------------------------------------------------------------------------------------------
+
+def VRds_stirrups(Asw_s: float, z: float, fywd: float, cot_theta: float = 2.5) -> float:
+    """Yielding of vertical stirrups, truss model (EN 1992-1-1:2004 (6.8), MC2010 (7.3-29)):
+    V_Rd,s = Asw/s z fywd cot(theta). Asw_s in mm^2/mm."""
+    return Asw_s * z * fywd * cot_theta
+
+
+def VRd_max_strut(bw: float, z: float, fck: float, gamma_c: float = 1.5, cot_theta: float = 2.5,
+                  alpha_cw: float = 1.0) -> float:
+    """Web-strut crushing, EN 1992-1-1:2004 (6.9) with nu1 = 0.6 (1 - fck/250):
+    V_Rd,max = alpha_cw bw z nu1 fcd / (cot theta + tan theta)."""
+    nu1 = 0.6 * (1.0 - fck / 250.0)
+    return alpha_cw * bw * z * nu1 * fck / gamma_c / (cot_theta + 1.0 / cot_theta)
+
+
+def VRd_frc_with_stirrups(bw, d, rho_l, fck, fFtuk, fctk, Asw_s, fywd, cot_theta=2.5,
+                          sigma_cp=0.0, gamma_c=1.5):
+    """fib MC2010 7.7.3.2: V_Rd = V_Rd,F + V_Rd,s (fibre term of (7.7-5) plus stirrups), capped by
+    the strut-crushing limit. Returns a dict."""
+    VF = VRdF_mc2010(bw, d, rho_l, fck, fFtuk, fctk, sigma_cp, gamma_c)
+    Vs = VRds_stirrups(Asw_s, 0.9 * d, fywd, cot_theta)
+    Vmax = VRd_max_strut(bw, 0.9 * d, fck, gamma_c, cot_theta)
+    return {"V_Rd,F": VF, "V_Rd,s": Vs, "V_Rd,max": Vmax, "V_Rd": min(VF + Vs, Vmax)}
+
+
+def annexL_stirrup_replacement_ok(fFtuk_ef: float, fck: float) -> bool:
+    """Annex L: minimum shear reinforcement may be replaced by fibres if fFtu,ef >= 0.08 sqrt(fck)."""
+    return fFtuk_ef >= 0.08 * np.sqrt(fck)
+
+
+def column_axial_capacity(Ac: float, As: float, fck: float, fyk: float, gamma_c: float = 1.5,
+                          gamma_s: float = 1.15, alpha_cc: float = 1.0) -> float:
+    """Centred compression (squash load), N_Rd = alpha_cc fck/gamma_c (Ac - As) + As fyd (positive)."""
+    return alpha_cc * fck / gamma_c * (Ac - As) + As * min(fyk / gamma_s, 0.002 * 200000.0)
+
+
+def nominal_curvature_moment(N_Ed: float, M0Ed: float, l0: float, d: float, h: float, Ac: float,
+                             As: float, fck: float, fyk: float, phi_ef: float = 0.0,
+                             lam: float | None = None, gamma_c: float = 1.5,
+                             gamma_s: float = 1.15) -> dict:
+    """Second-order design moment by the nominal-curvature method, EN 1992-1-1:2004 5.8.8:
+    M_Ed = M0Ed + N_Ed e2, e2 = (1/r) l0^2 / 10, 1/r = Kr Kphi eps_yd / (0.45 d),
+    Kr = (1 + omega - n) / (1 + omega - 0.4) <= 1, Kphi = 1 + beta phi_ef >= 1,
+    beta = 0.35 + fck/200 - lambda/150; plus imperfection e_i = l0/400. N_Ed positive."""
+    fcd, fyd = fck / gamma_c, fyk / gamma_s
+    n = N_Ed / (Ac * fcd)
+    omega = As * fyd / (Ac * fcd)
+    Kr = min((1.0 + omega - n) / (1.0 + omega - 0.4), 1.0)
+    i = h / np.sqrt(12.0)
+    lam = lam if lam is not None else l0 / i
+    beta = 0.35 + fck / 200.0 - lam / 150.0
+    Kphi = max(1.0 + beta * phi_ef, 1.0)
+    curv = Kr * Kphi * fyd / 200000.0 / (0.45 * d)
+    e2 = curv * l0 ** 2 / 10.0
+    ei = l0 / 400.0
+    M = M0Ed + N_Ed * (ei + e2)
+    return {"M_Ed": M, "e2": e2, "e_i": ei, "Kr": Kr, "Kphi": Kphi, "lambda": lam}
+
+
+def punching_ec2_2004(u1: float, d: float, rho_l: float, fck: float, gamma_c: float = 1.5) -> float:
+    """EN 1992-1-1:2004 (6.47): v_Rd,c = 0.18/gamma_c k (100 rho fck)^(1/3) >= 0.035 k^1.5 sqrt(fck),
+    k = 1 + sqrt(200/d) <= 2, rho <= 0.02; returns V_Rd,c = v_Rd,c u1 d (u1 at 2d)."""
+    k = min(1.0 + np.sqrt(200.0 / d), 2.0)
+    v = max(0.18 / gamma_c * k * (100.0 * min(rho_l, 0.02) * fck) ** (1.0 / 3.0),
+            0.035 * k ** 1.5 * np.sqrt(fck))
+    return v * u1 * d
+
+
+def punching_mc2010_level2(b0: float, dv: float, rs: float, d: float, fck: float, fyd: float,
+                           m_ratio: float = 1.0, dg: float = 16.0, gamma_c: float = 1.5,
+                           Es: float = 200000.0) -> dict:
+    """fib MC2010 7.3.5.3-4, Level II: psi = 1.5 rs/d fyd/Es (mSd/mRd)^1.5,
+    k_dg = 32/(16 + dg) >= 0.75, k_psi = 1/(1.5 + 0.9 k_dg psi d) <= 0.6,
+    V_Rd,c = k_psi sqrt(fck)/gamma_c b0 dv."""
+    psi = 1.5 * rs / d * fyd / Es * m_ratio ** 1.5
+    kdg = max(32.0 / (16.0 + dg), 0.75)
+    kpsi = min(1.0 / (1.5 + 0.9 * kdg * psi * d), 0.6)
+    return {"psi": psi, "k_psi": kpsi, "V_Rd,c": kpsi * np.sqrt(fck) / gamma_c * b0 * dv}
+
+
+def interaction_annexL(b, h, fck, fFtud, layers, gamma_c=1.5, N_values=None, **kw):
+    """Reference N-M interaction (EN 1992-1-1 + Annex L, rigid-plastic fibre block), sweeping the
+    axial force N (tension positive, as in uls_bending_annexL). Points whose neutral axis falls
+    outside the section are returned as NaN."""
+    if N_values is None:
+        N_values = np.linspace(-0.85 * fck / gamma_c * b * h, 0.0, 12)
+    Ms = []
+    for N in N_values:
+        try:
+            Ms.append(uls_bending_annexL(b, h, fck, fFtud, layers, gamma_c, N_Ed=float(N), **kw)["M_Rd"])
+        except ValueError:
+            Ms.append(np.nan)
+    return {"N": np.asarray(N_values, float), "M": np.asarray(Ms, float)}

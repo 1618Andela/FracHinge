@@ -198,6 +198,9 @@ class CrackedHinge:
         # 2) global scan (fallback)
         if y0 is None:
             grid = np.linspace(-0.5 * h, 1.5 * h, 161)
+            if N_ext != 0.0:  # axial force: the neutral axis may lie far outside the section
+                far = h * np.geomspace(0.6, 1e6, 80)
+                grid = np.concatenate([-0.5 * h - far[::-1], grid, h + far])
             vals = np.array([f(g) for g in grid])
             roots = []
             for i in range(len(grid) - 1):
@@ -239,7 +242,13 @@ class CrackedHinge:
                     out[k].append(0.0 if k not in ("sigma_s", "w_s") else np.zeros(len(self.rebars)))
                 out["y0"][-1] = self.section.centroid
                 continue
-            st = self.solve(th, N_ext, y0)
+            try:
+                st = self.solve(th, N_ext, y0)
+            except RuntimeError:
+                if N_ext == 0.0:
+                    raise
+                failure = "no equilibrium under N (axial capacity exhausted)"
+                break
             y0 = st.y0
             out["theta"].append(th)
             out["M"].append(st.M)

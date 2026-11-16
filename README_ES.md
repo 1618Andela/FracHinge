@@ -1,11 +1,17 @@
 # FracHinge
 
-**Cálculo de secciones de hormigón armado (HA), reforzado con fibras de acero (HRFA) e híbridas (HA+HRFA) mediante mecánica de la fractura.**
+**Cálculo de secciones de hormigón armado (HA), reforzado con fibras de acero (HRFA) e híbridas (HA+HRFA), secciones y elementos, mediante mecánica de la fractura.**
 
 FracHinge implementa el método **FMSD** (cálculo seccional basado en mecánica de la fractura). Es una rótula cohesiva
 fisurada (fisura ficticia de Hillerborg, rótula no lineal de Olesen y adherencia del *Tension Chord Model*) vinculada a
 las leyes y formatos de seguridad del **Código Modelo 2010** y del **Anejo L de EN 1992-1-1:2023**, con contraste
 normativo (Anejo L, MC2010, ACI 544.4R).
+
+**Comprobación de elementos (v1.1).** Cada comprobación da un resultado *principal* de mecánica de fractura o modelo
+mecánico y, por separado, una *referencia normativa*: flexocompresión (diagrama N–M con la rótula cohesiva), pilares
+esbeltos (fisura cohesiva única + segundo orden, ley de compresión del Anejo L de Ruiz et al. 2023), cortante (CCCM de
+Marí et al. 2014 con G_f y cercos; MASM de Marí et al. 2020 para HRFA con σ_tu de la ley cohesiva) y punzonamiento
+(teoría de la fisura crítica de Muttoni 2008 con puenteo cohesivo σ(ψd/6), Maya Duque et al. 2012).
 
 ## Validación (reproducible con `python examples/generate_all.py`)
 | Comprobación | Resultado |
@@ -18,6 +24,7 @@ normativo (Anejo L, MC2010, ACI 544.4R).
 | 20 vigas HA+HRFA, 0–40 kg/m³ × ρ = 0–3,14 % (Carpinteri, Cadamuro y Ventura, 2015; cargas digitalizadas) | P_max 0,90 (CoV 16,0 %); ρ = 0,25–1,13 %: 0,98 (CoV 9,3 %) |
 | 9 vigas de gran canto sin cercos (Minelli et al., 2014) | vigas que agotan a flexión M_u/M_max 1,02–1,07; roturas por cortante 0,32–0,84 |
 | 43 vigas de HRFA sin cercos (base de datos de Cuenca et al., 2018), comprobación normativa a cortante | MC2010 1,07 (CoV 19,4 %), Anejo L 1,14 (CoV 21,6 %) |
+| Mismas 43 vigas, MASM mecánico con σ_tu = 0,33 f_R3 de la ley cohesiva (sin ajuste) | 0,91 (CoV 31,1 %): **no conservador**, 0,75 con d ≥ 900 mm (el término de fibras no tiene efecto tamaño); la aplicación lo avisa |
 
 ## Uso rápido
 ```bash
@@ -32,9 +39,10 @@ cd matlab && octave-cli --eval run_tests
 Manual técnico, artículo, presentaciones y curso, en español e inglés, en `docs/` (fuentes LaTeX y PDF compilados).
 
 ## Limitaciones
-Ancho de rótula s = h/2 (hipótesis); fisura dominante única; adherencia rígido-plástica; carga monótona; cortante con
-fórmulas normativas; el CoV de las resistencias residuales en el ECOV es un dato del usuario; queda pendiente la
-validación con vigas HA+HRFA. El programa es una herramienta de análisis y contraste y **no sustituye** a la
+Ancho de rótula s = h/2 (hipótesis); fisura dominante única; adherencia rígido-plástica; carga monótona; el CoV de las
+resistencias residuales en el ECOV es un dato del usuario. Elementos: el término de fibras del MASM carece de efecto
+tamaño; los modelos de pilar (fisura única) y punzonamiento (CSCT + puenteo cohesivo) aún no se han validado con
+ensayos dentro de FracHinge; los coeficientes parciales de los modelos mecánicos de cortante no están calibrados. El programa es una herramienta de análisis y contraste y **no sustituye** a la
 normativa vigente.
 
 Licencia del código: MIT. Documentos: CC BY 4.0.

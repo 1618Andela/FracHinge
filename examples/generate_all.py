@@ -38,7 +38,7 @@ from frachinge.materials import (  # noqa: E402
     mc2010_residual, annexL_residual, tcm_bond)
 from frachinge.hinge import CrackedHinge, Section, SimplyBeam, en14651_prism  # noqa: E402
 from frachinge.inverse import identify_fct, identify_law  # noqa: E402
-from frachinge import codes, fracture  # noqa: E402
+from frachinge import codes, fracture, members  # noqa: E402
 from frachinge.safety import ecov  # noqa: E402
 
 FIG = os.path.join(ROOT, "docs", "figures")
@@ -1233,6 +1233,113 @@ def sensitivity_s():
     put("sensMORVar", 100 * (max(r["mor200"] for r in rows) / min(r["mor200"] for r in rows) - 1), "{:.1f}")
 
 
+# ------------------------------------------------------------------------------------------
+# 1.1: member checks (shear, N-M, columns, punching) -- mechanical models vs code reference
+# ------------------------------------------------------------------------------------------
+
+def validation_masm_cuenca():
+    """MASM (Mari et al. 2020, Eq. 26) on the Cuenca et al. (2018) beams failing in shear, with the
+    residual stress sigma_tu taken from the cohesive laws used by FracHinge (no fitting)."""
+    rows = []
+    for (ref, bid, fib, vf, bw, d, ad, rho, fc, fR1, fR3, fm, Vu) in CUENCA_DB:
+        if fm not in ("S", "SY"):
+            continue
+        out = {}
+        for key, st in (("rp", fR3 / 3.0), ("al", 0.33 * fR3)):
+            r = members.shear_masm_sfrc(bw, d, ad * d, rho / 100.0, fc, st)
+            out[key] = Vu * 1e3 / r["V_u"]
+        rows.append(dict(ref=ref, d=d, fR3=fR3, **out))
+    for key, nm in (("rp", "RP"), ("al", "AL")):
+        mu, cov = _stats([r[key] for r in rows])
+        put(f"masm{nm}mean", mu)
+        put(f"masm{nm}cov", cov, "{:.1f}")
+        put(f"masm{nm}unsafe", sum(r[key] < 1.0 for r in rows), "{:d}")
+        big = [r[key] for r in rows if r["d"] >= 900]
+        small = [r[key] for r in rows if r["d"] < 900]
+        put(f"masm{nm}big", np.mean(big))
+        put(f"masm{nm}small", np.mean(small))
+    put("masmN", len(rows), "{:d}")
+    for lang in ("en", "es"):
+        fig, ax = plt.subplots(figsize=(4.6, 3.2))
+        x = [r["d"] for r in rows]
+        y = [r["al"] for r in rows]
+        c = [P[0] if r["fR3"] < 3 else (P[1] if r["fR3"] < 5 else P[2]) for r in rows]
+        ax.scatter(x, y, c=c, s=22, edgecolors="white", linewidths=0.6, zorder=3)
+        ax.axhline(1.0, color="#52514e", lw=0.8)
+        ax.set_xscale("log")
+        ax.set_xlabel("$d$ [mm]")
+        ax.set_ylabel("$V_{u,exp}/V_{MASM}$ (" + T(lang, "mean values", "valores medios") + ")")
+        for j, lb in enumerate(("$f_{R3}<3$", "$3\\leq f_{R3}<5$", "$f_{R3}\\geq5$ MPa")):
+            ax.scatter([], [], c=P[j], s=22, label=lb)
+        ax.legend(fontsize=7)
+        fig.tight_layout()
+        save(fig, "fig_validation_masm", lang)
+    json.dump(rows, open(os.path.join(TAB, "validation_masm.json"), "w"), indent=1, default=float)
+
+
+def example_members():
+    """Worked examples of the member checks: N-M interaction, slender column, shear with stirrups
+    and fibres, punching. Mechanical / fracture-mechanics result first, code reference second."""
+    fck, fcm, fR1k, fR3k = 30.0, 38.0, 4.0, 3.5
+    E = ecm_from_fcm(fcm)
+    law = law_envelope(law_linear_softening(fctm_from_fck(fck), gf_mc2010(fcm)),
+                       law_mc2010_frc_linear(fR1k, fR3k))
+    sec = Section.rectangle(300.0, 300.0)
+    comp = compression_annexL(fcm, fR1k)
+    st = Steel(500.0, 540.0)
+    rb = [Rebar(40.0, 452.0, 12.0, st), Rebar(260.0, 452.0, 12.0, st)]
+    Ns = np.linspace(-0.95 * fcm * sec.area, 0.0, 14)
+    ia = members.interaction_hinge(sec, law, comp, E, rebars=rb, N_values=Ns, n_layers=150, n=60)
+    layers = [(300.0 - 40.0, 452.0, 500.0), (40.0, 452.0, 500.0)]
+    ra = codes.interaction_annexL(300.0, 300.0, fcm, 0.33 * fR3k, layers, gamma_c=1.0,
+                                  N_values=Ns)
+    k0 = int(np.argmin(np.abs(Ns)))
+    put("exMNzeroHinge", ia["M"][k0] / 1e6, "{:.0f}")
+    put("exMNmaxHinge", np.nanmax(ia["M"]) / 1e6, "{:.0f}")
+    put("exMNmaxAL", np.nanmax(ra["M"]) / 1e6, "{:.0f}")
+    cols = []
+    for L in (3000.0, 6000.0, 9000.0):
+        cb = members.column_buckling_hinge(sec, law, comp, E, L, 20.0, rebars=rb, n_layers=120, n=50,
+                                           N_grid=np.linspace(0.05, 1.0, 20) * fcm * sec.area)
+        cols.append((L, cb["N_u"], cb["N_euler"]))
+        put(f"exColNu{int(L / 1000)}", cb["N_u"] / 1e3, "{:.0f}")
+        put(f"exColNe{int(L / 1000)}", cb["N_euler"] / 1e3, "{:.0f}")
+    sh_rc = members.shear_masm_design(300.0, 450.0, 1350.0, 0.012, fck, 0.0)
+    sh_f = members.shear_masm_design(300.0, 450.0, 1350.0, 0.012, fck, 0.33 * fR3k / 1.5)
+    sh_fs = members.shear_masm_design(300.0, 450.0, 1350.0, 0.012, fck, 0.33 * fR3k / 1.5, rho_w=0.001)
+    put("exShRC", sh_rc["V_Rd"] / 1e3, "{:.0f}")
+    put("exShF", sh_f["V_Rd"] / 1e3, "{:.0f}")
+    put("exShFS", sh_fs["V_Rd"] / 1e3, "{:.0f}")
+    fctk = 0.7 * fctm_from_fck(fck)
+    ref = codes.VRd_frc_with_stirrups(300.0, 450.0, 0.012, fck, 0.33 * fR3k, fctk, 0.001 * 300.0,
+                                      435.0, cot_theta=2.5)
+    put("exShRefF", ref["V_Rd,F"] / 1e3, "{:.0f}")
+    put("exShRefFS", ref["V_Rd"] / 1e3, "{:.0f}")
+    lawf = law_mc2010_frc_linear(fR1k, fR3k)
+    p0 = members.punching_csct_sfrc(rc=150.0, d=200.0, rs=1100.0, fc=fcm, fy=550.0, mR=150000.0)
+    p1 = members.punching_csct_sfrc(rc=150.0, d=200.0, rs=1100.0, fc=fcm, fy=550.0, mR=150000.0,
+                                    fibre_law=lawf)
+    put("exPunRC", p0["V_R"] / 1e3, "{:.0f}")
+    put("exPunF", p1["V_R"] / 1e3, "{:.0f}")
+    put("exPunFf", p1["V_Rf"] / 1e3, "{:.0f}")
+    put("exPunW", p1.get("w_crack", np.nan), "{:.2f}")
+    for lang in ("en", "es"):
+        fig, ax = plt.subplots(1, 2, figsize=(7.4, 3.2))
+        ax[0].plot(ia["M"] / 1e6, -ia["N"] / 1e3, color=P[0], lw=2,
+                   label=T(lang, "cohesive hinge (mean)", "rótula cohesiva (media)"))
+        ax[0].plot(ra["M"] / 1e6, -ra["N"] / 1e3, color=P[1], lw=2, ls="--",
+                   label=T(lang, "Annex L block (ref.)", "bloque Anejo L (ref.)"))
+        ax[0].set_xlabel("$M$ [kN m]")
+        ax[0].set_ylabel(T(lang, "$N$ (compression) [kN]", "$N$ (compresión) [kN]"))
+        ax[0].legend(fontsize=7)
+        ax[0].set_title(T(lang, "(a) N-M interaction 300x300", "(a) Interacción N-M 300x300"))
+        ax[1].bar([f"{int(L / 1000)} m" for L, _, _ in cols], [c[1] / 1e3 for c in cols], color=P[0], width=0.5)
+        ax[1].set_ylabel("$N_u$ [kN]")
+        ax[1].set_title(T(lang, "(b) slender column, $e_0$ = 20 mm", "(b) pilar esbelto, $e_0$ = 20 mm"))
+        fig.tight_layout()
+        save(fig, "fig_members", lang)
+
+
 def write_numbers():
     import re
     for fname, dec in (("numbers.tex", "."), ("numbers_es.tex", "{,}")):
@@ -1253,7 +1360,15 @@ if __name__ == "__main__":
     t0 = time.time()
     steps = [example1, fig_laws, fig_compression, example2, fig_profiles, validation_size_effect,
              example5, example6, example7, fig_lefm, example4, validation_gao, validation_bosco, validation_carpinteri, validation_delarosa2025, validation_minelli,
-             validation_cuenca_shear, validation_tiberti, sensitivity_s, compare_pcm, derived_numbers]
+             validation_cuenca_shear, validation_tiberti, sensitivity_s, compare_pcm, derived_numbers,
+             validation_masm_cuenca, example_members]
+    if len(sys.argv) > 1:  # run selected steps only, keeping the other numbers already written
+        import re as _re
+        fn = os.path.join(TAB, "numbers.tex")
+        if os.path.exists(fn):
+            for k, v in _re.findall(r"csname fh@(.+?)\\endcsname\{(.*)\}$", open(fn).read(), _re.M):
+                NUM[k] = v.replace("\\%", "%")
+        steps = [st for st in steps if st.__name__ in sys.argv[1:]]
     for s in steps:
         print("->", s.__name__, f"{time.time() - t0:.0f}s")
         s()

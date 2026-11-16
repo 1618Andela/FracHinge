@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.1.0 (2026-11-16) – member checks
+- New module `frachinge.members` (fracture mechanics / mechanical models, primary results): N–M interaction with the cohesive hinge; slender-column single-crack second-order model; CCCM shear for RC with or without stirrups (Marí et al. 2014) and MASM for SFRC without stirrups (Marí et al. 2020) with σ_tu from the cohesive law, strut crushing and a design wrapper; punching by the CSCT with cohesive fibre bridging (Muttoni 2008; Maya Duque et al. 2012).
+- New code references in `frachinge.codes` (kept separate): V_Rd,s, V_Rd,max, MC2010 V_Rd,F + V_Rd,s, Annex L stirrup replacement, squash load, EC2 nominal curvature, EC2-2004 and MC2010 Level II punching, Annex L N–M interaction.
+- `DesignInput.N_Ed` (compression positive) for bending with axial force; the hinge root search is widened when N ≠ 0 and stops gracefully when equilibrium under N is lost.
+- Streamlit app reorganised into *FM* tabs (primary) and a *Code ref.* tab; new Shear, Columns and Punching tabs and N–M diagram.
+- Validation of the MASM on the Cuenca et al. (2018) database (unconservative, reported as such); MATLAB `fh_masm_sfrc.m`, `fh_punching_csct.m`; 8 new tests.
+
 ## 1.0.0 (2026-11-16) – first public release
 - Cohesive cracked-hinge sectional model (band s = h/2) for plain, RC, SFRC and hybrid sections, with Tension Chord Model bond, EC2 / Annex L / parabola-rectangle / elastic-plastic compression laws and axial force.
 - Constitutive laws: MC2010 plain-concrete bilinear softening, MC2010 linear and rigid-plastic FRC laws, EN 1992-1-1:2023 Annex L laws, envelope rule.

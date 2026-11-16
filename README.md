@@ -1,6 +1,6 @@
 # FracHinge
 
-**Fracture-mechanics-based design of reinforced (RC), steel-fibre-reinforced (SFRC) and hybrid (R/SFRC) concrete sections.**
+**Fracture-mechanics-based design of reinforced (RC), steel-fibre-reinforced (SFRC) and hybrid (R/SFRC) concrete sections and members.**
 *Cálculo de secciones de hormigón armado, con fibras de acero e híbridas mediante mecánica de la fractura* — see [README_ES.md](README_ES.md).
 
 FracHinge implements the **FMSD** (Fracture-Mechanics-based Sectional Design) method. It is a cohesive
@@ -15,6 +15,11 @@ cross-checks (Annex L, MC2010, ACI 544.4R).
 - EN 14651 simulation and **inverse identification** of σ(w) from F_L and f_R,j.
 - ULS/SLS design workflow: partial factors, **ECOV** and global factor (MC2010 7.11), ductility index, size-dependent minimum reinforcement, direct crack width.
 - Code formulae: classification (MC2010, Table L.2), κ_G, shear (8.11), (8.16), (L.19)–(L.20), MC2010 (7.7-5), crack spacing (L.26)–(L.28), MC2010 crack width (7.7-22), A_s,min (12.1)/(L.29), Henager–Doherty (ACI 544.4R).
+- **Member checks (v1.1)**, each with a *primary* fracture-mechanics / mechanical result and a separate *code reference*:
+  - bending + axial force: N–M interaction from the cohesive hinge (reference: Annex L block with N);
+  - slender columns: single cohesive crack + second order, Annex L compression law of Ruiz et al. (2023) (reference: squash load, EC2 nominal curvature);
+  - shear: CCCM (Marí et al. 2014, with G_f size effect, stirrups, strut crushing) and MASM for SFRC (Marí et al. 2020) with σ_tu taken from the cohesive law (reference: MC2010 V_Rd,F + V_Rd,s, Annex L τ_Rd,cF, stirrup replacement);
+  - punching: Critical Shear Crack Theory (Muttoni 2008) with fibre bridging σ(ψd/6) from the cohesive law (Maya Duque et al. 2012) (reference: EC2-2004, MC2010 Level II).
 - Interfaces: Python library, **Streamlit app (ES/EN)**, MATLAB/Octave functions.
 
 ## Validation (reproducible with `python examples/generate_all.py`)
@@ -28,11 +33,12 @@ cross-checks (Annex L, MC2010, ACI 544.4R).
 | 20 R/SFRC beams, 0–40 kg/m³ × ρ = 0–3.14 % (Carpinteri, Cadamuro & Ventura, 2015; loads digitised) | P_max 0.90 (CoV 16.0 %); ρ = 0.25–1.13 %: 0.98 (CoV 9.3 %) |
 | 9 deep beams without stirrups (Minelli et al., 2014) | flexure-governed beams M_u/M_max 1.02–1.07; shear failures 0.32–0.84 |
 | 43 SFRC beams without stirrups (Cuenca et al., 2018 database), code shear checks | MC2010 1.07 (CoV 19.4 %), Annex L 1.14 (CoV 21.6 %) |
+| Same 43 beams, mechanical MASM with σ_tu = 0.33 f_R3 from the cohesive law (no fitting) | 0.91 (CoV 31.1 %): **unconservative**, 0.75 for d ≥ 900 mm (no size effect in the fibre term) — shown as a warning in the app |
 
 ## Quick start
 ```bash
 pip install -r requirements.txt
-pytest -q                              # 18 tests
+pytest -q                              # 30 tests
 streamlit run app/streamlit_app.py     # graphical application (see DEPLOY.md to publish it online)
 python examples/generate_all.py        # all figures, tables and numbers of the documents
 cd matlab && octave-cli --eval run_tests
@@ -42,11 +48,15 @@ from frachinge.design import DesignInput, run_design
 res = run_design(DesignInput(b=300, h=500, fck=30, fR1k=4.0, fR3k=3.6,
                              bars=[(40, 603, 16)], M_Ed=120e6, M_ser=70e6))
 print(res["M_Rd_hinge"]/1e6, res["annexL_uls"]["M_Rd"]/1e6, res["ecov"]["R_d"]/1e6)
+
+from frachinge import members, codes
+print(members.shear_masm_design(300, 450, 1350, 0.012, 30, fFtud=0.77)["V_Rd"]/1e3)   # primary (mechanical)
+print(codes.VRd_frc_with_stirrups(300, 450, 0.012, 30, 1.16, 2.0, 0.0, 435)["V_Rd"]/1e3)  # code reference
 ```
 
 ## Repository layout
 ```
-frachinge/   materials, hinge, inverse, codes, fracture, safety, design
+frachinge/   materials, hinge, inverse, codes, fracture, safety, design, members
 app/         Streamlit application
 matlab/      fh_*.m functions, examples, run_tests.m
 examples/    generate_all.py, data_gao2025.py, data_bosco1990.py
@@ -63,8 +73,10 @@ docs/        manual (ES/EN), article (ES/EN), beamer (ES/EN), course (ES/EN), fi
 | Course (PhD / industry) | `docs/course/curso_es.pdf` | `docs/course/course_en.pdf` |
 
 ## Limitations
-Hinge width s = h/2 (assumption); single dominant crack; rigid-plastic bond; monotonic loading; shear via code
-formulae; CoV of residual strengths in ECOV is a user input; validation with fibre-reinforced RC beams pending.
+Hinge width s = h/2 (assumption); single dominant crack; rigid-plastic bond; monotonic loading; CoV of residual
+strengths in ECOV is a user input. Member models: the MASM fibre term lacks a size effect (unconservative for deep
+SFRC beams); the column (single-crack) and punching (CSCT + cohesive bridging) implementations are not yet
+validated against tests within FracHinge; partial factors of the mechanical shear models are not reliability-calibrated.
 The software is an analysis/cross-check tool and **does not replace** the codes in force.
 
 ## Citation and licence
