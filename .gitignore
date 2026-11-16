@@ -1,0 +1,22 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+*.aux
+*.log
+*.out
+*.toc
+*.nav
+*.snm
+*.bbl
+*.blg
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+.DS_Store
+
+# private until the journal article is accepted
+docs/article/
+docs/submission/
+docs/manual/
+docs/beamer/
+docs/course/

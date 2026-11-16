@@ -1,0 +1,18 @@
+% Design workflow of the proposed method (FMSD)
+\begin{tikzpicture}[node distance=0.45cm and 0.6cm,>=Stealth,
+  box/.style={draw,rounded corners,fill=fhblue!6,align=center,font=\footnotesize,minimum width=4.6cm,minimum height=0.8cm},
+  dec/.style={draw,diamond,aspect=2.6,fill=fhorange!8,align=center,font=\footnotesize,inner sep=1pt}]
+  \node[box] (s1) {1. \lang{Datos: geometría, $f_{ck}$, EN 14651 ($f_{R,j}$), armaduras}{Input: geometry, $f_{ck}$, EN 14651 ($f_{R,j}$), bars}};
+  \node[box,below=of s1] (s2) {2. \lang{Leyes $\sigma(w)$: MC2010, Anejo L o análisis inverso}{Laws $\sigma(w)$: MC2010, Annex L or inverse analysis}};
+  \node[box,below=of s2] (s3) {3. \lang{Leyes de cálculo: $\kappa_O\kappa_G\sigma_k/\gamma_{SF}$, $f_{cd}$, $f_{yd}$}{Design laws: $\kappa_O\kappa_G\sigma_k/\gamma_{SF}$, $f_{cd}$, $f_{yd}$}};
+  \node[box,below=of s3] (s4) {4. \lang{Rótula cohesiva: $M$--$\theta$, $w(y)$, $\sigma_s$}{Cohesive hinge: $M$--$\theta$, $w(y)$, $\sigma_s$}};
+  \node[box,below=of s4] (s5) {5. \lang{ELU: $M_{Rd}$ (o ECOV) y ductilidad $M_{post}/M_{cr}$}{ULS: $M_{Rd}$ (or ECOV) and ductility $M_{post}/M_{cr}$}};
+  \node[box,below=of s5] (s6) {6. \lang{ELS: $w(M_{ser})\le w_{lim}$, $\sigma_s$}{SLS: $w(M_{ser})\le w_{lim}$, $\sigma_s$}};
+  \node[dec,below=of s6] (d) {\lang{¿Cumple?}{OK?}};
+  \node[box,below=of d,fill=fhgreen!10] (s7) {7. \lang{Contraste normativo e informe}{Code cross-check and report}};
+  \node[box,right=1.0cm of s4,minimum width=3.0cm,fill=fhorange!8] (r) {\lang{Redimensionar}{Resize}\\ $h$, $A_s$, $f_{R,j}$};
+  \foreach \a/\b in {s1/s2,s2/s3,s3/s4,s4/s5,s5/s6,s6/d}\draw[->] (\a)--(\b);
+  \draw[->] (d)--node[right,font=\scriptsize]{\lang{sí}{yes}}(s7);
+  \draw[->] (d.east) -| node[near start,above,font=\scriptsize]{no} (r.south);
+  \draw[->] (r.north) |- (s2.east);
+\end{tikzpicture}

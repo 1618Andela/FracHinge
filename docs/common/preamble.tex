@@ -1,0 +1,30 @@
+% Common preamble for FracHinge documents (ES/EN). Requires \newif\ifes set before input.
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage{amsmath,amssymb,bm}
+\usepackage{graphicx}
+\usepackage{booktabs,multirow,array,tabularx,longtable}
+\usepackage{xcolor}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,shapes.geometric,calc,patterns,decorations.pathreplacing,decorations.pathmorphing}
+\usepackage{siunitx}
+\usepackage{listings}
+\usepackage{caption,subcaption}
+\usepackage{enumitem}
+\usepackage{tcolorbox}
+\tcbuselibrary{breakable,skins}
+\definecolor{fhblue}{HTML}{2a78d6}
+\definecolor{fhorange}{HTML}{eb6834}
+\definecolor{fhgreen}{HTML}{1baf7a}
+\definecolor{fhgray}{HTML}{52514e}
+\newcommand{\lang}[2]{\ifes#1\else#2\fi}
+\newcommand{\LANG}{\ifes es\else en\fi}
+\newcommand{\fig}[1]{../figures/#1_\LANG.pdf}
+\ifes\input{../tables/numbers_es.tex}\else\input{../tables/numbers.tex}\fi
+\lstset{basicstyle=\ttfamily\footnotesize,breaklines=true,frame=single,columns=fullflexible,
+  keywordstyle=\color{fhblue}\bfseries,commentstyle=\color{fhgray}\itshape,showstringspaces=false,
+  literate={á}{{\'a}}1 {é}{{\'e}}1 {í}{{\'i}}1 {ó}{{\'o}}1 {ú}{{\'u}}1 {ñ}{{\~n}}1 {Á}{{\'A}}1 {É}{{\'E}}1 {Ó}{{\'O}}1 {ü}{{\"u}}1}
+\newtcolorbox{ejemplo}[1]{breakable,colback=fhblue!4,colframe=fhblue!70,title={#1},fonttitle=\bfseries}
+\newtcolorbox{nota}[1][]{breakable,colback=fhorange!5,colframe=fhorange!80,title={#1},fonttitle=\bfseries}
+\newtcolorbox{novedad}[1][]{breakable,colback=fhgreen!6,colframe=fhgreen!80!black,title={#1},fonttitle=\bfseries}

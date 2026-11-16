@@ -1,0 +1,10 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "FracHinge: fracture-mechanics-based design of RC, SFRC and hybrid concrete sections"
+version: 1.0.0
+date-released: 2026-11-16
+license: MIT
+authors:
+  - family-names: "De La Rosa Velasco"
+    given-names: "Ángel"
+keywords: [fracture mechanics, cohesive crack, cracked hinge, steel fibre reinforced concrete, Eurocode 2 Annex L, fib Model Code 2010]

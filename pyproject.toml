@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "frachinge"
+version = "1.0.0"
+description = "Fracture-mechanics-based design of reinforced, steel-fibre-reinforced and hybrid concrete sections (cohesive cracked hinge)"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.9"
+authors = [{name = "Ángel De La Rosa Velasco"}]
+dependencies = ["numpy>=1.22", "scipy>=1.8", "matplotlib>=3.5"]
+keywords = ["fracture mechanics", "cohesive crack", "SFRC", "Eurocode 2", "Model Code 2010", "concrete design"]
+classifiers = ["Programming Language :: Python :: 3", "License :: OSI Approved :: MIT License",
+               "Topic :: Scientific/Engineering"]
+
+[project.optional-dependencies]
+app = ["streamlit>=1.30", "pandas>=1.5"]
+test = ["pytest>=7"]
+
+[tool.setuptools]
+packages = ["frachinge"]
