@@ -130,3 +130,21 @@ def test_punching_cccm_sfrc_components():
     r0 = members.punching_cccm_sfrc(rcol, 127, 152, 25.4, 0.0083, 0.0)
     assert r0["V_cf"] == 0 and r["V_u"] > r0["V_u"]
     assert members.punching_cccm_sfrc(rcol, 127, 152, 25.4, 0.0083, st, size_reduction=False)["F_red"] == 1.0
+
+
+def test_column_database_and_one_hinge_prediction():
+    import sys, os
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "examples"))
+    from data_caballero_columns import DB
+    from frachinge.hinge import CrackedHinge
+    from frachinge.materials import compression_annexL, law_linear_softening
+    assert len(DB) == 25
+    src, sid, h, fc, N, phi, stp, fib, fR1, fR3, Mexp = DB[8]  # NF60L05V2S100
+    law = law_envelope(law_linear_softening(members.fctm_mc2010(fc), gf_mc2010(fc)),
+                       law_mc2010_frc_linear(fR1, fR3))
+    st = Steel(548.27, 656.98, 2e5, 0.184)
+    A = 3 * np.pi * phi ** 2 / 4
+    hg = CrackedHinge(Section.rectangle(150.0, h), law, compression_annexL(fc, fR1), ecm_from_fcm(fc),
+                      rebars=[Rebar(0.15 * h, A, phi, st), Rebar(0.85 * h, A, phi, st)], n_layers=150)
+    r = hg.response(theta_max=0.08, n=120, N_ext=-N * 1e3)
+    assert 0.85 < Mexp / (np.nanmax(r["M"]) / 1e6) < 1.15

@@ -504,5 +504,5 @@ with tabs[4]:
 
 st.sidebar.markdown("---")
 st.sidebar.warning(t("Herramienta de apoyo al cálculo: no sustituye la comprobación del proyectista conforme a EN 1992-1-1:2023.", "Design-support tool: it does not replace the designer's verification according to EN 1992-1-1:2023."))
-st.sidebar.caption("FracHinge v1.4.0 · MIT · " + t("Ver docs/ para manual, artículo y curso.",
+st.sidebar.caption("FracHinge v1.5.0 · MIT · " + t("Ver docs/ para manual, artículo y curso.",
                                                   "See docs/ for manual, article and course."))

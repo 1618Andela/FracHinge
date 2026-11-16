@@ -27,6 +27,7 @@ Marí et al. 2014 con G_f y cercos; MASM de Marí et al. 2020 para HRFA con σ_t
 | Mismas 43 vigas, MASM con σ_tu = 0,33 f_R3 de la ley cohesiva, Ec. (26) original (sin ajuste) | 0,91 (CoV 31,1 %), 0,75 con d ≥ 900 mm: el término de fibras no tiene efecto tamaño |
 | Ídem con el factor de efecto tamaño energético de Bažant λ_s = √(2/(1+d/254)) (ACI 318-19) en el término de fibras, orientación isótropa (sin ajuste) | 0,99 (CoV 29,0 %), 0,99 con d ≥ 900 mm; 27/43 cocientes < 1 |
 | Ídem, λ_s + fibras alineadas con el eje, η_or = sen θ_cr (por defecto desde 1.3, cota del lado de la seguridad; datos de orientación de Cunha 2010) | 1,23 (CoV 26,0 %), mín. 0,81, 10/43 cocientes < 1 |
+| 25 pilares esbeltos de HA y HRFA con axil (Caballero-Morrison et al. 2012, 2013), momento máximo con la rótula cohesiva, sin ajuste | 1,00 (CoV 11,3 %) |
 | 393 vigas de HA sin cercos (base de Sarkhosh 2014 / ACI-DAfStb), CCCM de Marí et al. 2014 | 1,05 (CoV 14,1 %), sin sesgo con el canto (EC2 1,14, CoV 15,0 %) |
 
 ## Uso rápido

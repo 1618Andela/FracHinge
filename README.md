@@ -36,12 +36,13 @@ cross-checks (Annex L, MC2010, ACI 544.4R).
 | Same 43 beams, mechanical MASM with σ_tu = 0.33 f_R3 from the cohesive law, original Eq. (26) (no fitting) | 0.91 (CoV 31.1 %), 0.75 for d ≥ 900 mm: no size effect in the fibre term |
 | Same, with Bažant's energetic size-effect factor λ_s = √(2/(1+d/254)) (ACI 318-19) on the fibre term, isotropic fibres (no fitting) | 0.99 (CoV 29.0 %), 0.99 for d ≥ 900 mm; 27/43 ratios < 1 |
 | Same, λ_s + fibres aligned with the beam axis, η_or = sin θ_cr (default since 1.3, safe-side bound; orientation data of Cunha 2010) | 1.23 (CoV 26.0 %), min 0.81, 10/43 ratios < 1 |
+| 25 slender RC/SFRC columns under axial load (Caballero-Morrison et al. 2012, 2013), maximum moment with the cohesive hinge, no fitting | 1.00 (CoV 11.3 %) |
 | 393 RC beams without stirrups (Sarkhosh 2014 / ACI-DAfStb database), CCCM of Marí et al. 2014 | 1.05 (CoV 14.1 %), no bias with depth (EC2 1.14, CoV 15.0 %) |
 
 ## Quick start
 ```bash
 pip install -r requirements.txt
-pytest -q                              # 34 tests
+pytest -q                              # 35 tests
 streamlit run app/streamlit_app.py     # graphical application (see DEPLOY.md to publish it online)
 python examples/generate_all.py        # all figures, tables and numbers of the documents
 cd matlab && octave-cli --eval run_tests

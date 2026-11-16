@@ -410,5 +410,16 @@
  "pmCorr": "0.56",
  "pmHmin": "55",
  "pmHmax": "180",
- "pmMayaMean": "1.121"
+ "pmMayaMean": "1.121",
+ "colN": "25",
+ "colNfib": "15",
+ "colMean": "1.00",
+ "colCov": "11.3",
+ "colFibMean": "0.95",
+ "colFibCov": "8.9",
+ "colPlainMean": "1.07",
+ "colPlainCov": "10.6",
+ "colMin": "0.78",
+ "colMax": "1.26",
+ "colLowNuFib": "0.84"
 }

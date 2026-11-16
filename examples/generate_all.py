@@ -492,10 +492,9 @@ def example4():
         res.append(row)
         print("  rho_min h=", hh, row)
     with open(os.path.join(TAB, "tab_rhomin.tex"), "w") as f:
-        f.write("\\begin{tabular}{r cc cc}\n\\toprule\n & \\multicolumn{2}{c}{RC} & \\multicolumn{2}{c}{R/SFRC 2b}\\\\\n"
-                "\\cmidrule(lr){2-3}\\cmidrule(lr){4-5}\n$h$ [mm] & hinge & EC2 (12.1) & hinge & Annex L (L.29)\\\\\n\\midrule\n")
+        f.write("\\begin{tabular}{r cc}\n\\toprule\n$h$ [mm] & RC & R/SFRC 2b\\\\\n\\midrule\n")
         for r_ in res:
-            f.write(f"{r_['h']} & {100 * r_['plain']:.3f} & {100 * r_['ec2']:.3f} & {100 * r_['sfrc']:.3f} & {100 * r_['annexL']:.3f}\\\\\n")
+            f.write(f"{r_['h']} & {100 * r_['plain']:.3f} & {100 * r_['sfrc']:.3f}\\\\\n")
         f.write("\\bottomrule\n\\end{tabular}\n")
     for r_ in res:
         put(f"rhominH{r_['h']}plain", 100 * r_["plain"], "{:.3f}")
@@ -506,9 +505,7 @@ def example4():
         fig, ax = plt.subplots(figsize=(5.0, 3.3))
         H = [r_["h"] for r_ in res]
         ax.plot(H, [100 * r_["plain"] for r_ in res], marker="o", color=P[0], ls=LS[0], label=T(lang, "hinge, RC", "rótula, HA"))
-        ax.plot(H, [100 * r_["ec2"] for r_ in res], marker="s", color=P[1], ls=LS[1], label="EC2 (12.1)")
         ax.plot(H, [100 * r_["sfrc"] for r_ in res], marker="^", color=P[2], ls=LS[2], label=T(lang, "hinge, R/SFRC 2b", "rótula, HA+fibras 2b"))
-        ax.plot(H, [100 * r_["annexL"] for r_ in res], marker="D", color=P[3], ls=LS[3], label=T(lang, "Annex L (L.29)", "Anejo L (L.29)"))
         ax.set_xlabel("$h$ [mm]")
         ax.set_ylabel(r"$\rho_{min}$ [%]")
         ax.legend()
@@ -575,7 +572,6 @@ def example5():
                "mean": T(lang, "mean", "medias")}
         for i, lev in enumerate(("mean", "char", "design")):
             ax.plot(res[lev]["w_bottom"], res[lev]["M"] / 1e6, color=P[i], ls=LS[i], label=lab[lev])
-        ax.axhline(uls["M_Rd"] / 1e6, color=P[3], ls=LS[3], label=T(lang, "Annex L rigid-plastic $M_{Rd}$", "Anejo L rígido-plástico $M_{Rd}$"))
         ax.axhline(E["R_d"] / 1e6, color=P[6], ls=LS[4], label=T(lang, "ECOV $R_d$ (peak)", "ECOV $R_d$ (pico)"))
         ax.set_xlabel(T(lang, "crack opening at the soffit $w$ [mm]", "apertura en la cara traccionada $w$ [mm]"))
         ax.set_ylabel(T(lang, "$M$ [kNm/m]", "$M$ [kNm/m]"))
@@ -660,7 +656,6 @@ def example6():
             nm = T(lang, "RC", "HA") if case == "RC" else T(lang, "R/SFRC", "HA+fibras")
             ax[0].plot(resM[case]["theta"] * 1000, resM[case]["M"] / 1e6, color=P[i], ls=LS[i], label=nm)
             ax[1].plot(Ms / 1e6, wh[case], color=P[i], ls=LS[i], marker="o", ms=3, label=nm + T(lang, " hinge", " rótula"))
-            ax[1].plot(Ms / 1e6, wmc[case], color=P[i], ls=LS[i + 2], marker="s", mfc="none", ms=3, label=nm + " MC2010 (7.7-22)")
         ax[0].set_xlabel(r"$\theta$ [mrad]")
         ax[0].set_ylabel("$M$ [kNm]")
         ax[0].set_xlim(0, 20)
@@ -1395,6 +1390,58 @@ def validation_punching_mari2023():
     put("pmMayaMean", np.mean([row[13] for row in PDB]), "{:.3f}")
 
 
+def validation_columns_caballero():
+    """N-M capacity of the cohesive hinge against 25 slender RC/SFRC columns under constant axial load
+    and lateral load (Caballero-Morrison et al. 2012, 2013). Mean properties, no fitting: plain
+    concrete linear softening (fctm, G_F MC2010) enveloped with the MC2010 linear FRC law from the
+    measured fR1, fR3; compression law of Annex L (Ruiz et al. 2023) for SFRC and EC2 for plain
+    concrete; measured steel curves. Confinement by stirrups is neglected. The experimental M_max
+    (critical section, second order and self weight included by the authors) is compared with the
+    maximum moment of the hinge at the test axial force."""
+    from data_caballero_columns import DB as CDB
+    rows = []
+    for (src, sid, h, fc, N, phi, stp, fib, fR1, fR3, Mexp) in CDB:
+        E = ecm_from_fcm(fc)
+        fct = members.fctm_mc2010(fc)
+        plain = law_linear_softening(fct, gf_mc2010(fc))
+        law = law_envelope(plain, law_mc2010_frc_linear(fR1, fR3)) if fib else plain
+        comp = compression_annexL(fc, fR1) if fib else compression_ec2(fc)
+        st = Steel(548.27, 656.98, 2e5, 0.184) if phi == 12 else Steel(545.52, 648.21, 2e5, 0.172)
+        A = 3 * np.pi * phi ** 2 / 4
+        dp = 0.15 * h
+        hg = CrackedHinge(Section.rectangle(150.0, h), law, comp, E,
+                          rebars=[Rebar(dp, A, phi, st), Rebar(h - dp, A, phi, st)], n_layers=200)
+        r = hg.response(theta_max=0.08, n=160, N_ext=-N * 1e3)
+        rows.append(dict(src=src, id=sid, fib=fib, nu=N * 1e3 / (150 * h * fc), ratio=Mexp / (np.nanmax(r["M"]) / 1e6)))
+    x = np.array([r_["ratio"] for r_ in rows])
+    fibm = np.array([r_["fib"] > 0 for r_ in rows])
+    put("colN", len(x), "{:d}")
+    put("colNfib", int(fibm.sum()), "{:d}")
+    put("colMean", x.mean())
+    put("colCov", 100 * x.std(ddof=1) / x.mean(), "{:.1f}")
+    put("colFibMean", x[fibm].mean())
+    put("colFibCov", 100 * x[fibm].std(ddof=1) / x[fibm].mean(), "{:.1f}")
+    put("colPlainMean", x[~fibm].mean())
+    put("colPlainCov", 100 * x[~fibm].std(ddof=1) / x[~fibm].mean(), "{:.1f}")
+    put("colMin", x.min())
+    put("colMax", x.max())
+    lo = np.array([r_["nu"] < 0.2 for r_ in rows])
+    put("colLowNuFib", x[lo & fibm].mean())
+    json.dump(rows, open(os.path.join(TAB, "validation_columns.json"), "w"), indent=1, default=float)
+    for lang in ("en", "es"):
+        fig, ax = plt.subplots(figsize=(4.8, 3.2))
+        for k, (sel, lb) in enumerate(((~fibm, T(lang, "plain concrete", "sin fibras")),
+                                       (fibm, T(lang, "SFRC", "con fibras")))):
+            ax.scatter([r_["nu"] for r_, s_ in zip(rows, sel) if s_], x[sel], s=26, color=P[k],
+                       edgecolors="white", linewidths=0.6, label=lb, zorder=3)
+        ax.axhline(1.0, color="#52514e", lw=0.8)
+        ax.set_xlabel(r"$\nu=N/(b\,h\,f_c)$")
+        ax.set_ylabel(r"$M_{max,exp}/M_{max,hinge}$")
+        ax.legend(fontsize=7)
+        fig.tight_layout()
+        save(fig, "fig_validation_columns", lang)
+
+
 def example_members():
     """Worked examples of the member checks: N-M interaction, slender column, shear with stirrups
     and fibres, punching. Mechanical / fracture-mechanics result first, code reference second."""
@@ -1445,8 +1492,6 @@ def example_members():
         fig, ax = plt.subplots(1, 2, figsize=(7.4, 3.2))
         ax[0].plot(ia["M"] / 1e6, -ia["N"] / 1e3, color=P[0], lw=2,
                    label=T(lang, "cohesive hinge (mean)", "rótula cohesiva (media)"))
-        ax[0].plot(ra["M"] / 1e6, -ra["N"] / 1e3, color=P[1], lw=2, ls="--",
-                   label=T(lang, "Annex L block (ref.)", "bloque Anejo L (ref.)"))
         ax[0].set_xlabel("$M$ [kN m]")
         ax[0].set_ylabel(T(lang, "$N$ (compression) [kN]", "$N$ (compresión) [kN]"))
         ax[0].legend(fontsize=7)
@@ -1480,7 +1525,7 @@ if __name__ == "__main__":
              example5, example6, example7, fig_lefm, example4, validation_gao, validation_bosco, validation_carpinteri, validation_delarosa2025, validation_minelli,
              validation_cuenca_shear, validation_tiberti, sensitivity_s, compare_pcm, derived_numbers,
              validation_masm_cuenca, example_members, validation_cccm_rc,
-             validation_punching_mari2023]
+             validation_punching_mari2023, validation_columns_caballero]
     if len(sys.argv) > 1:  # run selected steps only, keeping the other numbers already written
         import re as _re
         fn = os.path.join(TAB, "numbers.tex")

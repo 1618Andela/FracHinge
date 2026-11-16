@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.5.0 (2026-11-16) – fracture-mechanics-only documentation
+- Manual (ES/EN) restricted to a structural design approach based exclusively on fracture mechanics: code, empirical and plasticity checks removed (ACI 544, code shear and punching formulae, Annex L rigid-plastic block, EC2 nominal curvature, code crack-width and minimum-reinforcement formulae, code rules for plastic analysis and reinforcement replacement); the SFRC punching CCCM of Marí et al. (2023) removed from the document (no fracture ingredient beyond σ_tu, not reproducible).
+- New validation: maximum moment of 25 slender RC/SFRC columns under axial load (Caballero-Morrison et al. 2012, 2013) with the cohesive hinge, no fitting: mean 1.00, CoV 11.3 % (`examples/data_caballero_columns.py`, `validation_columns_caballero`).
+- Example 7 rewritten with the fracture-based shear models; figures and minimum-reinforcement table without code curves; new conclusions, limitations and future work; references to Lantsoght (2019) and Moraes Neto et al. (2013) databases (no fR per test).
+- The code library and the app keep their code-reference module/tab, outside the method of the document.
+
 ## 1.4.0 (2026-11-16) – SFRC punching CCCM
 - New `members.punching_cccm_sfrc` (Marí, Spinella & Rodríguez 2023, Structures 52:854–867) with σ_tu from the cohesive law, switchable thin-slab reduction F_red = 0.005 h ≤ 1; `members.sigma_tu_fibre_factor` (micromechanical reference, Eq. 20) and `members.fctm_mc2010`.
 - 94 SFRC punching tests of the paper in `examples/data_mari2023_punching.py`; with the tabulated data the implementation gives 0.93 (CoV 23 %) against the published 1.105 (CoV 11.9 %) – the table lacks fR, slab spans and fibre diameter/strength, so the published predictions cannot be recomputed exactly (documented).
