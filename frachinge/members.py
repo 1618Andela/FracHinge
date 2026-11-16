@@ -66,12 +66,14 @@ def shear_masm_rc(b: float, d: float, a: float, rho_l: float, fcm: float, rho_w:
                   GF: float | None = None, fct: float | None = None) -> dict:
     """Shear strength of an RC beam (with or without stirrups) by the Compression Chord Capacity
     Model (Mari et al. 2014, Table 1), mean values. Returns V_u [N] and its components.
+    Default fct = 0.30 min(fcm, 60)^(2/3), the convention used by the authors in their validation.
 
     v_w = 167 fct/Ec (1 + 2 Ec Gf / (fct^2 d)); v_s = 0.85 rho_w fyw / fct;
     v_l = 0.25 x/d - 0.05 (only with stirrups); v_c = zeta [(0.88 + 0.70 v_s) x/d + 0.02].
     """
     Ec = masm_ec_2014(fcm)
-    fct = fct if fct is not None else fctm_from_fck(min(fcm - 8.0, 60.0))
+    # Mari et al. (2014), Eq. (9) with fcm in place of fck, limited to 60 MPa (as in their validation)
+    fct = fct if fct is not None else 0.30 * min(fcm, 60.0) ** (2.0 / 3.0)
     Gf = GF if GF is not None else masm_gf_2014(fcm, dmax)
     xd = masm_neutral_axis(rho_l, Es, Ec)
     zeta = masm_zeta_2014(a)
@@ -96,7 +98,7 @@ def size_factor_bazant(d: float, d0: float = 254.0) -> float:
 def shear_masm_sfrc(b: float, d: float, a: float, rho_l: float, fcm: float, sigma_tu: float,
                     Es: float = 200000.0, Ec: float | None = None, fct: float | None = None,
                     rho_w: float = 0.0, fyw: float = 500.0, size_effect: str | None = "bazant",
-                    d0: float = 254.0) -> dict:
+                    d0: float = 254.0, orientation: str = "aligned") -> dict:
     """Shear strength of an SFRC beam by the Multi-Action Shear Model (Mari et al. 2020, Eq. 26),
     mean values:  V_u = [xi (0.84 - 0.10 s) x/d + 0.08 + 1.10 s] fctm b d,  s = sigma_tu / fctm.
 
@@ -108,17 +110,28 @@ def shear_masm_sfrc(b: float, d: float, a: float, rho_l: float, fcm: float, sigm
     Bazant's energetic size-effect factor lambda_s = sqrt(2/(1 + d/d0)) <= 1 (d0 = 254 mm, as in
     ACI 318-19). The original Eq. (26) has no size effect in this term, which made it unconservative
     for deep beams (Minelli et al. 2014). size_effect=None reproduces the original equation.
+
+    orientation (FracHinge 1.3): sigma_tu comes from EN 14651 prisms, whose crack is normal to the
+    preferential fibre direction (beam axis). The critical shear crack is inclined at theta to the axis
+    (cot theta = 0.85 d / (d - x) <= 2.5, Mari et al.), so it is crossed by fewer aligned fibres.
+    "aligned"  : fibres fully aligned with the beam axis -> bridging stress x sin(theta) (lower bound
+                 of the fibre term, default);
+    "isotropic": 3D random orientation -> no correction (upper bound).
+    Experimental support: orientation numbers about 0.70 in prisms against 0.27-0.45 in cores
+    (Cunha 2010), flow-induced alignment in SCFRC (Grunewald 2004; Ozyurt 2006).
     """
     fct = fct if fct is not None else fctm_from_fck(min(fcm - 8.0, 60.0))
     Ec = Ec if Ec is not None else masm_ec_2014(fcm)
     xd = masm_neutral_axis(rho_l, Es, Ec)
     xi = masm_xi_2020(d, a)
-    s = min(sigma_tu / fct, 1.0)
+    cot = min(0.85 * d / max(d - xd * d, 1e-9), 2.5)
+    eta = 1.0 / math.sqrt(1.0 + cot ** 2) if orientation == "aligned" else 1.0
+    s = min(eta * sigma_tu / fct, 1.0)
     lam = size_factor_bazant(d, d0) if size_effect == "bazant" else 1.0
     vu = xi * (0.84 - 0.10 * s) * xd + 0.08 + 1.10 * s * lam
     Vu = vu * fct * b * d
     Vs = 0.85 * rho_w * fyw * b * d if rho_w > 0 else 0.0
-    out = {"x_d": xd, "xi": xi, "lambda_F": lam, "sigma_tu_over_fct": s, "V_u_concrete_fibres": Vu,
+    out = {"x_d": xd, "xi": xi, "lambda_F": lam, "eta_orientation": eta, "cot_theta_cr": cot, "sigma_tu_over_fct": s, "V_u_concrete_fibres": Vu,
            "V_fibres": 1.10 * s * lam * fct * b * d, "V_s": Vs,
            "V_max_strut": strut_crushing(b, d, xd * d, fcm - 8.0, gamma_c=1.0)}
     out["V_u"] = min(Vu + Vs, out["V_max_strut"])
@@ -128,7 +141,8 @@ def shear_masm_sfrc(b: float, d: float, a: float, rho_l: float, fcm: float, sigm
 
 def shear_masm_design(b: float, d: float, a: float, rho_l: float, fck: float, fFtud: float = 0.0,
                       rho_w: float = 0.0, fywd: float = 435.0, gamma_c: float = 1.5,
-                      Es: float = 200000.0, dmax: float = 20.0, size_effect: str | None = "bazant") -> dict:
+                      Es: float = 200000.0, dmax: float = 20.0, size_effect: str | None = "bazant",
+                      orientation: str = "aligned") -> dict:
     """Design shear resistance with the mechanical models (Mari et al. 2020 design proposal):
     the concrete tensile strength is expressed with the design compressive strength,
     fctd = 0.3 (fck/gamma_c)^(2/3) (fck <= 60 MPa), and the fibre residual stress is the design
@@ -140,9 +154,10 @@ def shear_masm_design(b: float, d: float, a: float, rho_l: float, fck: float, fF
     fcm = fck + 8.0
     if fFtud > 0:
         r = shear_masm_sfrc(b, d, a, rho_l, fcm, fFtud, Es=Es, fct=fctd, rho_w=rho_w, fyw=fywd,
-                            size_effect=size_effect)
+                            size_effect=size_effect, orientation=orientation)
         model = "MASM-SFRC (Mari et al. 2020, design)" + (" + Bazant size effect on fibres"
-                                                         if size_effect == "bazant" else "")
+                                                         if size_effect == "bazant" else "") + (
+                                                         ", aligned fibres" if orientation == "aligned" else "")
     else:
         r = shear_masm_rc(b, d, a, rho_l, fcm, rho_w=rho_w, fyw=fywd, Es=Es, dmax=dmax, fct=fctd)
         model = "CCCM-RC (Mari et al. 2014, design)"

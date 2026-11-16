@@ -10,7 +10,7 @@ normativo (Anejo L, MC2010, ACI 544.4R).
 **Comprobación de elementos (v1.1).** Cada comprobación da un resultado *principal* de mecánica de fractura o modelo
 mecánico y, por separado, una *referencia normativa*: flexocompresión (diagrama N–M con la rótula cohesiva), pilares
 esbeltos (fisura cohesiva única + segundo orden, ley de compresión del Anejo L de Ruiz et al. 2023), cortante (CCCM de
-Marí et al. 2014 con G_f y cercos; MASM de Marí et al. 2020 para HRFA con σ_tu de la ley cohesiva y efecto tamaño de Bažant en el término de fibras) y punzonamiento
+Marí et al. 2014 con G_f y cercos; MASM de Marí et al. 2020 para HRFA con σ_tu de la ley cohesiva efecto tamaño de Bažant y cota de orientación de fibras en el término de fibras) y punzonamiento
 (teoría de la fisura crítica de Muttoni 2008 con puenteo cohesivo σ(ψd/6), Maya Duque et al. 2012).
 
 ## Validación (reproducible con `python examples/generate_all.py`)
@@ -25,7 +25,9 @@ Marí et al. 2014 con G_f y cercos; MASM de Marí et al. 2020 para HRFA con σ_t
 | 9 vigas de gran canto sin cercos (Minelli et al., 2014) | vigas que agotan a flexión M_u/M_max 1,02–1,07; roturas por cortante 0,32–0,84 |
 | 43 vigas de HRFA sin cercos (base de datos de Cuenca et al., 2018), comprobación normativa a cortante | MC2010 1,07 (CoV 19,4 %), Anejo L 1,14 (CoV 21,6 %) |
 | Mismas 43 vigas, MASM con σ_tu = 0,33 f_R3 de la ley cohesiva, Ec. (26) original (sin ajuste) | 0,91 (CoV 31,1 %), 0,75 con d ≥ 900 mm: el término de fibras no tiene efecto tamaño |
-| Ídem con el factor de efecto tamaño energético de Bažant λ_s = √(2/(1+d/254)) (ACI 318-19) en el término de fibras (por defecto desde 1.2, sin ajuste) | 0,99 (CoV 29,0 %), 0,99 con d ≥ 900 mm; 27/43 cocientes < 1 (f_R3 alto); la app mantiene el aviso |
+| Ídem con el factor de efecto tamaño energético de Bažant λ_s = √(2/(1+d/254)) (ACI 318-19) en el término de fibras, orientación isótropa (sin ajuste) | 0,99 (CoV 29,0 %), 0,99 con d ≥ 900 mm; 27/43 cocientes < 1 |
+| Ídem, λ_s + fibras alineadas con el eje, η_or = sen θ_cr (por defecto desde 1.3, cota del lado de la seguridad; datos de orientación de Cunha 2010) | 1,23 (CoV 26,0 %), mín. 0,81, 10/43 cocientes < 1 |
+| 393 vigas de HA sin cercos (base de Sarkhosh 2014 / ACI-DAfStb), CCCM de Marí et al. 2014 | 1,05 (CoV 14,1 %), sin sesgo con el canto (EC2 1,14, CoV 15,0 %) |
 
 ## Uso rápido
 ```bash

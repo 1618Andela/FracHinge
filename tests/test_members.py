@@ -20,7 +20,7 @@ def test_neutral_axis_closed_form():
 def test_masm_eq26_hand_value():
     # Mari et al. (2020) Eq. (26), mean values; hand calculation
     b, d, a, rho, fcm, st = 250.0, 440.0, 1320.0, 0.0112, 32.1, 1.0
-    r = members.shear_masm_sfrc(b, d, a, rho, fcm, st, size_effect=None)
+    r = members.shear_masm_sfrc(b, d, a, rho, fcm, st, size_effect=None, orientation="isotropic")
     fct = 0.3 * (fcm - 8.0) ** (2 / 3)
     xi = max(2 / math.sqrt(1 + d / 200) * (d / a) ** 0.2, 0.45)
     s = st / fct
@@ -97,3 +97,21 @@ def test_bazant_size_factor_on_fibre_term():
     r1 = members.shear_masm_sfrc(250, 1440, 4320, 0.0101, 32.1, 1.65)
     assert r1["V_fibres"] == pytest.approx(r0["V_fibres"] * members.size_factor_bazant(1440))
     assert r1["V_u"] < r0["V_u"]
+
+
+def test_orientation_bounds():
+    ra = members.shear_masm_sfrc(300, 450, 1350, 0.012, 38, 1.2)
+    ri = members.shear_masm_sfrc(300, 450, 1350, 0.012, 38, 1.2, orientation="isotropic")
+    assert ri["eta_orientation"] == 1.0
+    assert ra["eta_orientation"] == pytest.approx(1 / math.sqrt(1 + ra["cot_theta_cr"] ** 2))
+    assert ra["V_u"] < ri["V_u"]
+
+
+def test_cccm_reproduces_sarkhosh_database_statistics():
+    import sys, os
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "examples"))
+    from data_sarkhosh2014 import DB
+    r = np.array([Vu * 1e3 / members.shear_masm_rc(bw, d, a, As / (bw * d), fc)["V_u"]
+                  for (_, bw, a, d, As, fc, Vu, *_) in DB])
+    assert len(r) == 393
+    assert 1.0 < r.mean() < 1.1 and r.std(ddof=1) / r.mean() < 0.16

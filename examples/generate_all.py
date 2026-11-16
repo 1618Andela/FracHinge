@@ -1255,16 +1255,20 @@ def validation_masm_cuenca():
         a = ad * d
         V = Vu * 1e3
         st = 0.33 * fR3
-        out = {"rp": V / members.shear_masm_sfrc(bw, d, a, rho, fc, fR3 / 3.0, size_effect=None)["V_u"],
-               "al": V / members.shear_masm_sfrc(bw, d, a, rho, fc, st, size_effect=None)["V_u"],
-               "sel": V / members.shear_masm_sfrc(bw, d, a, rho, fc, st)["V_u"]}
+        out = {"rp": V / members.shear_masm_sfrc(bw, d, a, rho, fc, fR3 / 3.0, size_effect=None,
+                                                 orientation="isotropic")["V_u"],
+               "al": V / members.shear_masm_sfrc(bw, d, a, rho, fc, st, size_effect=None,
+                                                 orientation="isotropic")["V_u"],
+               "sel": V / members.shear_masm_sfrc(bw, d, a, rho, fc, st, orientation="isotropic")["V_u"],
+               "ori": V / members.shear_masm_sfrc(bw, d, a, rho, fc, st)["V_u"],
+               "orins": V / members.shear_masm_sfrc(bw, d, a, rho, fc, st, size_effect=None)["V_u"]}
         fct = fctm_from_fck(min(fc - 8.0, 60.0))
         E, GF = ecm_from_fcm(fc), gf_mc2010(fc)
         fFts = 0.45 * fR1
         fFtu = max(fFts - (fFts - 0.5 * fR3 + 0.2 * fR1), 0.0)
         lch_f = E * (GF + 0.5 * (fFts + fFtu) * 2.5) / fct ** 2
         d0 = 254.0 * lch_f / (E * GF / fct ** 2)
-        out["lch"] = V / members.shear_masm_sfrc(bw, d, a, rho, fc, st, d0=d0)["V_u"]
+        out["lch"] = V / members.shear_masm_sfrc(bw, d, a, rho, fc, st, d0=d0, orientation="isotropic")["V_u"]
         law = law_annexL(fR1, fR3, fct, E, wu=10.0, include_matrix=False)
         Es, Ecs = 200000.0, 10000.0 * fc ** (1.0 / 3.0)
         n = Es / Ecs
@@ -1273,10 +1277,12 @@ def validation_masm_cuenca():
         def g(Vt):
             eps = Vt * (a - d / 2) / (bw * d * rho * Es * (d - c / 3)) * (0.6 * d - c) / (d - c)
             s_w = float(law.sigma(np.array([eps * d]))[0])
-            return members.shear_masm_sfrc(bw, d, a, rho, fc, s_w, size_effect=None)["V_u"] - Vt
+            return members.shear_masm_sfrc(bw, d, a, rho, fc, s_w, size_effect=None,
+                                           orientation="isotropic")["V_u"] - Vt
         out["csct"] = V / brentq(g, 1e3, 5e6)
         rows.append(dict(ref=ref, d=d, fR3=fR3, **out))
-    for key, nm in (("rp", "RP"), ("al", "AL"), ("sel", "SEL"), ("lch", "LCH"), ("csct", "CSCT")):
+    for key, nm in (("rp", "RP"), ("al", "AL"), ("sel", "SEL"), ("lch", "LCH"), ("csct", "CSCT"),
+                    ("ori", "ORI"), ("orins", "ORINS")):
         mu, cov = _stats([r[key] for r in rows])
         put(f"masm{nm}mean", mu)
         put(f"masm{nm}cov", cov, "{:.1f}")
@@ -1286,14 +1292,20 @@ def validation_masm_cuenca():
         put(f"masm{nm}min", min(r[key] for r in rows))
     for grp, sel in (("Mi", lambda r: 22 <= r["ref"] <= 27), ("Ib", lambda r: 58 <= r["ref"] <= 69),
                      ("Oa", lambda r: r["ref"] >= 78)):
-        for key, nm in (("al", "AL"), ("sel", "SEL")):
+        for key, nm in (("al", "AL"), ("sel", "SEL"), ("ori", "ORI")):
             put(f"masm{nm}{grp}", np.mean([r[key] for r in rows if sel(r)]))
     put("masmN", len(rows), "{:d}")
+    put("masmORImin", min(r["ori"] for r in rows))
+    put("masmORIother", np.mean([r["ori"] for r in rows if not (22 <= r["ref"] <= 27 or 58 <= r["ref"] <= 69
+                                                                or r["ref"] >= 78)]))
+    put("etaTyp", np.median([1 / np.sqrt(1 + min(0.85 / (1 - members.masm_neutral_axis(
+        rw[7] / 100, 2e5, members.masm_ec_2014(rw[8]))), 2.5) ** 2) for rw in CUENCA_DB if rw[11] in ("S", "SY")]))
     put("lamFifteen", members.size_factor_bazant(1440.0))
     for lang in ("en", "es"):
-        fig, ax = plt.subplots(1, 2, figsize=(7.4, 3.2), sharey=True)
+        fig, ax = plt.subplots(1, 3, figsize=(9.6, 3.2), sharey=True)
         for i, (key, ttl) in enumerate((("al", T(lang, "(a) Eq. (26), no size effect", "(a) Ec. (26), sin efecto tamaño")),
-                                        ("sel", T(lang, "(b) with Bazant $\\lambda_s$ on fibres", "(b) con $\\lambda_s$ de Bažant en fibras")))):
+                                        ("sel", T(lang, "(b) + Bazant $\\lambda_s$", "(b) + $\\lambda_s$ de Bažant")),
+                                        ("ori", T(lang, "(c) + aligned fibres", "(c) + fibras alineadas")))):
             x = [r["d"] for r in rows]
             y = [r[key] for r in rows]
             c = [P[0] if r["fR3"] < 3 else (P[1] if r["fR3"] < 5 else P[2]) for r in rows]
@@ -1304,11 +1316,56 @@ def validation_masm_cuenca():
             ax[i].set_title(ttl)
         ax[0].set_ylabel("$V_{u,exp}/V_{MASM}$ (" + T(lang, "mean values", "valores medios") + ")")
         for jj, lb in enumerate(("$f_{R3}<3$", "$3\\leq f_{R3}<5$", "$f_{R3}\\geq5$ MPa")):
-            ax[1].scatter([], [], c=P[jj], s=22, label=lb)
-        ax[1].legend(fontsize=7)
+            ax[2].scatter([], [], c=P[jj], s=22, label=lb)
+        ax[2].legend(fontsize=7)
         fig.tight_layout()
         save(fig, "fig_validation_masm", lang)
     json.dump(rows, open(os.path.join(TAB, "validation_masm.json"), "w"), indent=1, default=float)
+
+
+def validation_cccm_rc():
+    """CCCM (Mari et al. 2014) on the 393 RC beams without stirrups of Sarkhosh (2014), Appendix D
+    (ACI-DAfStb database, Reineck et al. 2013, plus Sarkhosh's tests). Mean values, no fitting."""
+    from data_sarkhosh2014 import DB as SDB
+    r, d_, ad_, rho_ = [], [], [], []
+    for (nr, bw, a, d, As, fc, Vu, rEC2, rACI, rMC, rBaz) in SDB:
+        rho = As / (bw * d)
+        r.append(Vu * 1e3 / members.shear_masm_rc(bw, d, a, rho, fc)["V_u"])
+        d_.append(d)
+        ad_.append(a / d)
+        rho_.append(rho)
+    r, d_ = np.array(r), np.array(d_)
+    mu, cov = _stats(r)
+    put("rcN", len(r), "{:d}")
+    put("rcMean", mu)
+    put("rcCov", cov, "{:.1f}")
+    put("rcUnsafe", int((r < 1).sum()), "{:d}")
+    put("rcFive", np.percentile(r, 5))
+    for nm, lo, hi in (("S", 0, 300), ("M", 300, 600), ("L", 600, 1e9)):
+        sel = (d_ >= lo) & (d_ < hi)
+        put(f"rc{nm}mean", r[sel].mean())
+        put(f"rc{nm}n", int(sel.sum()), "{:d}")
+    for k, nm in ((7, "EC"), (8, "ACI"), (9, "MC"), (10, "BY")):
+        x = np.array([row[k] for row in SDB])
+        put(f"rc{nm}mean", x.mean())
+        put(f"rc{nm}cov", 100 * x.std(ddof=1) / x.mean(), "{:.1f}")
+    rf = np.array([Vu * 1e3 / members.shear_masm_rc(bw, d, a, As / (bw * d), fc,
+                                                     fct=fctm_from_fck(min(fc - 8.0, 60.0)))["V_u"]
+                   for (nr, bw, a, d, As, fc, Vu, *_x) in SDB])
+    put("rcFckMean", rf.mean())
+    put("rcFckCov", 100 * rf.std(ddof=1) / rf.mean(), "{:.1f}")
+    for lang in ("en", "es"):
+        fig, ax = plt.subplots(1, 2, figsize=(7.4, 3.0), sharey=True)
+        ax[0].scatter(d_, r, s=10, color=P[0], alpha=0.7, edgecolors="none")
+        ax[0].set_xscale("log")
+        ax[0].set_xlabel("$d$ [mm]")
+        ax[1].scatter(ad_, r, s=10, color=P[0], alpha=0.7, edgecolors="none")
+        ax[1].set_xlabel("$a/d$")
+        for a_ in ax:
+            a_.axhline(1.0, color="#52514e", lw=0.8)
+        ax[0].set_ylabel("$V_{u,exp}/V_{CCCM}$")
+        fig.tight_layout()
+        save(fig, "fig_validation_cccm", lang)
 
 
 def example_members():
@@ -1395,7 +1452,7 @@ if __name__ == "__main__":
     steps = [example1, fig_laws, fig_compression, example2, fig_profiles, validation_size_effect,
              example5, example6, example7, fig_lefm, example4, validation_gao, validation_bosco, validation_carpinteri, validation_delarosa2025, validation_minelli,
              validation_cuenca_shear, validation_tiberti, sensitivity_s, compare_pcm, derived_numbers,
-             validation_masm_cuenca, example_members]
+             validation_masm_cuenca, example_members, validation_cccm_rc]
     if len(sys.argv) > 1:  # run selected steps only, keeping the other numbers already written
         import re as _re
         fn = os.path.join(TAB, "numbers.tex")

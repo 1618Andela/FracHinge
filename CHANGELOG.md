@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.3.0 (2026-11-16) – doctoral theses review
+- CCCM (Marí et al. 2014): default fct = 0.30 min(fcm, 60)^(2/3), the convention of the authors' validation. Independent validation on the 393 RC beams of Sarkhosh (2014, Appendix D; ACI-DAfStb database): mean 1.05, CoV 14.1 %, no bias with depth (`examples/data_sarkhosh2014.py`, `validation_cccm_rc`).
+- MASM: fibre-orientation option `orientation="aligned"` (default, η_or = sin θ_cr, safe-side bound) or `"isotropic"`; justified with the orientation factors measured by Cunha (2010) and the observations of Grünewald (2004), Özyurt (2006) and García Alberti (2015). On the 43 Cuenca beams: 1.23 (CoV 26 %, min 0.81, 10 < 1) versus 0.99 (CoV 29 %, 27 < 1) isotropic.
+- Manual: CCCM validation, orientation section, appendix with the 16 doctoral theses consulted and their use; slides, course exercise 10.5, app option, MATLAB `aligned` argument, 2 new tests.
+
 ## 1.2.0 (2026-11-16) – size effect in fibre shear
 - MASM (Marí et al. 2020): the fibre term is multiplied by Bažant's energetic size-effect factor λ_s = √(2/(1+d/d0)) ≤ 1, d0 = 254 mm (Bažant & Kim 1984; ACI 318-19), default `size_effect="bazant"`; `size_effect=None` gives the original Eq. (26). New `members.size_factor_bazant`.
 - Validation on the 43 Cuenca et al. (2018) shear failures, no fitting: mean 0.91 → 0.99, d ≥ 900 mm 0.75 → 0.99 (CoV 31.1 → 29.0 %). Two other fracture-mechanics variants are reported and rejected: d0 ∝ l_ch,FRC (no size effect, 0.91) and σ(w = ε d) from the critical shear crack theory (0.82).

@@ -350,7 +350,14 @@ with tabs[2]:
     cfm, cref = st.columns(2)
     with cfm:
         st.markdown(t("#### MF · Modelo mecánico (resultado principal)", "#### FM · Mechanical model (primary result)"))
-        r = members.shear_masm_design(b, d_s, a_s, rho_l, fck, fFtud, rho_w=rho_w, fywd=fywk / 1.15)
+        orient = st.radio(t("Orientación de fibras respecto a la fisura de cortante", "Fibre orientation w.r.t. the shear crack"),
+                          ["aligned", "isotropic"], horizontal=True,
+                          help=t("aligned: fibres alineadas con el eje de la viga (cota inferior, por defecto); "
+                                 "isotropic: orientación aleatoria 3D (cota superior)",
+                                 "aligned: fibres aligned with the beam axis (lower bound, default); "
+                                 "isotropic: 3D random orientation (upper bound)"))
+        r = members.shear_masm_design(b, d_s, a_s, rho_l, fck, fFtud, rho_w=rho_w, fywd=fywk / 1.15,
+                                      orientation=orient)
         st.write(r["model"])
         comp_rows = [[k, f"{r[k] / 1e3:.1f}"] for k in ("V_c", "V_w", "V_l", "V_s", "V_u_concrete_fibres") if k in r]
         comp_rows += [[t("Aplastamiento de bielas V_max", "Strut crushing V_max"), f"{r['V_max_strut'] / 1e3:.1f}"],
@@ -358,13 +365,19 @@ with tabs[2]:
         st.table(pd.DataFrame(comp_rows, columns=[t("Componente", "Component"), "kN"]))
         (st.success if r["V_Rd"] >= VEd * 1e3 else st.error)(f"V_Ed / V_Rd = {VEd * 1e3 / r['V_Rd']:.2f}")
         if use_f:
-            st.write(f"λs (Bažant / ACI 318-19) = {r.get('lambda_F', 1.0):.3f}")
-            st.warning(t("Validación (Cuenca et al. 2018, 43 vigas sin cercos, sin ajuste): con el efecto tamaño de Bažant "
-                         "en el término de fibras, media Vexp/Vcalc = 0,99 (CoV 29 %) y 0,99 para d ≥ 900 mm (antes 0,75); "
-                         "27 de 43 cocientes < 1, sobre todo con fR3 alto. Contrástese con la referencia normativa.",
-                         "Validation (Cuenca et al. 2018, 43 beams without stirrups, no fitting): with Bažant's size effect on "
-                         "the fibre term, mean Vexp/Vcalc = 0.99 (CoV 29 %) and 0.99 for d ≥ 900 mm (previously 0.75); "
-                         "27 of 43 ratios < 1, mainly with high fR3. Check against the code reference."))
+            st.write(f"λs (Bažant / ACI 318-19) = {r.get('lambda_F', 1.0):.3f};  "
+                     f"η_or = {r.get('eta_orientation', 1.0):.3f}")
+            st.info(t("Validación (Cuenca et al. 2018, 43 vigas sin cercos, sin ajuste): con efecto tamaño de Bažant y "
+                      "fibras alineadas, media Vexp/Vcalc = 1,23 (CoV 26 %, mínimo 0,81, 10 de 43 < 1); con orientación "
+                      "isótropa, 0,99 (CoV 29 %, 27 de 43 < 1). Referencia normativa al lado.",
+                      "Validation (Cuenca et al. 2018, 43 beams without stirrups, no fitting): with Bažant size effect "
+                      "and aligned fibres, mean Vexp/Vcalc = 1.23 (CoV 26 %, minimum 0.81, 10 of 43 < 1); with "
+                      "isotropic orientation, 0.99 (CoV 29 %, 27 of 43 < 1). Code reference alongside."))
+        else:
+            st.info(t("Validación del CCCM (393 vigas de HA sin cercos, base de Sarkhosh 2014 / ACI-DAfStb): "
+                      "media 1,05, CoV 14,1 %, sin sesgo con el canto.",
+                      "CCCM validation (393 RC beams without stirrups, Sarkhosh 2014 / ACI-DAfStb database): "
+                      "mean 1.05, CoV 14.1 %, no bias with depth."))
         st.caption(t("Coeficientes parciales no calibrados por fiabilidad (Marí et al. 2020).",
                      "Partial factors not calibrated by reliability analysis (Marí et al. 2020)."))
     with cref:
@@ -479,5 +492,5 @@ with tabs[4]:
 
 st.sidebar.markdown("---")
 st.sidebar.warning(t("Herramienta de apoyo al cálculo: no sustituye la comprobación del proyectista conforme a EN 1992-1-1:2023.", "Design-support tool: it does not replace the designer's verification according to EN 1992-1-1:2023."))
-st.sidebar.caption("FracHinge v1.2.0 · MIT · " + t("Ver docs/ para manual, artículo y curso.",
+st.sidebar.caption("FracHinge v1.3.0 · MIT · " + t("Ver docs/ para manual, artículo y curso.",
                                                   "See docs/ for manual, article and course."))
