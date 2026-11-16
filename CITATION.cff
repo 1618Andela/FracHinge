@@ -1,7 +1,7 @@
 cff-version: 1.2.0
 message: "If you use this software, please cite it as below."
 title: "FracHinge: fracture-mechanics-based design of RC, SFRC and hybrid concrete sections"
-version: 1.1.0
+version: 1.2.0
 date-released: 2026-11-16
 license: MIT
 authors:

@@ -87,25 +87,39 @@ def shear_masm_rc(b: float, d: float, a: float, rho_l: float, fcm: float, rho_w:
     return out
 
 
+def size_factor_bazant(d: float, d0: float = 254.0) -> float:
+    """Energetic size-effect law of Bazant (1984), in the form adopted by ACI 318-19 (22.5.5.1.3)
+    for one-way shear: lambda_s = sqrt(2 / (1 + d/d0)) <= 1, d0 = 10 in = 254 mm."""
+    return min(math.sqrt(2.0 / (1.0 + d / d0)), 1.0)
+
+
 def shear_masm_sfrc(b: float, d: float, a: float, rho_l: float, fcm: float, sigma_tu: float,
                     Es: float = 200000.0, Ec: float | None = None, fct: float | None = None,
-                    rho_w: float = 0.0, fyw: float = 500.0) -> dict:
+                    rho_w: float = 0.0, fyw: float = 500.0, size_effect: str | None = "bazant",
+                    d0: float = 254.0) -> dict:
     """Shear strength of an SFRC beam by the Multi-Action Shear Model (Mari et al. 2020, Eq. 26),
     mean values:  V_u = [xi (0.84 - 0.10 s) x/d + 0.08 + 1.10 s] fctm b d,  s = sigma_tu / fctm.
 
     sigma_tu is the average residual tensile stress of the SFRC; in FracHinge it is taken from the
     cohesive law (see :func:`sigma_tu_from_law`). If rho_w > 0 the stirrup term of Mari et al.
     (2014) is added by superposition (extension, not validated in the source).
+
+    size_effect="bazant" (default, FracHinge 1.2): the fibre-bridging term 1.10 s is multiplied by
+    Bazant's energetic size-effect factor lambda_s = sqrt(2/(1 + d/d0)) <= 1 (d0 = 254 mm, as in
+    ACI 318-19). The original Eq. (26) has no size effect in this term, which made it unconservative
+    for deep beams (Minelli et al. 2014). size_effect=None reproduces the original equation.
     """
     fct = fct if fct is not None else fctm_from_fck(min(fcm - 8.0, 60.0))
     Ec = Ec if Ec is not None else masm_ec_2014(fcm)
     xd = masm_neutral_axis(rho_l, Es, Ec)
     xi = masm_xi_2020(d, a)
     s = min(sigma_tu / fct, 1.0)
-    vu = xi * (0.84 - 0.10 * s) * xd + 0.08 + 1.10 * s
+    lam = size_factor_bazant(d, d0) if size_effect == "bazant" else 1.0
+    vu = xi * (0.84 - 0.10 * s) * xd + 0.08 + 1.10 * s * lam
     Vu = vu * fct * b * d
     Vs = 0.85 * rho_w * fyw * b * d if rho_w > 0 else 0.0
-    out = {"x_d": xd, "xi": xi, "sigma_tu_over_fct": s, "V_u_concrete_fibres": Vu, "V_s": Vs,
+    out = {"x_d": xd, "xi": xi, "lambda_F": lam, "sigma_tu_over_fct": s, "V_u_concrete_fibres": Vu,
+           "V_fibres": 1.10 * s * lam * fct * b * d, "V_s": Vs,
            "V_max_strut": strut_crushing(b, d, xd * d, fcm - 8.0, gamma_c=1.0)}
     out["V_u"] = min(Vu + Vs, out["V_max_strut"])
     out["stirrups_superposed"] = rho_w > 0
@@ -114,7 +128,7 @@ def shear_masm_sfrc(b: float, d: float, a: float, rho_l: float, fcm: float, sigm
 
 def shear_masm_design(b: float, d: float, a: float, rho_l: float, fck: float, fFtud: float = 0.0,
                       rho_w: float = 0.0, fywd: float = 435.0, gamma_c: float = 1.5,
-                      Es: float = 200000.0, dmax: float = 20.0) -> dict:
+                      Es: float = 200000.0, dmax: float = 20.0, size_effect: str | None = "bazant") -> dict:
     """Design shear resistance with the mechanical models (Mari et al. 2020 design proposal):
     the concrete tensile strength is expressed with the design compressive strength,
     fctd = 0.3 (fck/gamma_c)^(2/3) (fck <= 60 MPa), and the fibre residual stress is the design
@@ -125,8 +139,10 @@ def shear_masm_design(b: float, d: float, a: float, rho_l: float, fck: float, fF
     fctd = 0.3 * fcd ** (2.0 / 3.0)
     fcm = fck + 8.0
     if fFtud > 0:
-        r = shear_masm_sfrc(b, d, a, rho_l, fcm, fFtud, Es=Es, fct=fctd, rho_w=rho_w, fyw=fywd)
-        model = "MASM-SFRC (Mari et al. 2020, design)"
+        r = shear_masm_sfrc(b, d, a, rho_l, fcm, fFtud, Es=Es, fct=fctd, rho_w=rho_w, fyw=fywd,
+                            size_effect=size_effect)
+        model = "MASM-SFRC (Mari et al. 2020, design)" + (" + Bazant size effect on fibres"
+                                                         if size_effect == "bazant" else "")
     else:
         r = shear_masm_rc(b, d, a, rho_l, fcm, rho_w=rho_w, fyw=fywd, Es=Es, dmax=dmax, fct=fctd)
         model = "CCCM-RC (Mari et al. 2014, design)"

@@ -18,7 +18,7 @@ cross-checks (Annex L, MC2010, ACI 544.4R).
 - **Member checks (v1.1)**, each with a *primary* fracture-mechanics / mechanical result and a separate *code reference*:
   - bending + axial force: N–M interaction from the cohesive hinge (reference: Annex L block with N);
   - slender columns: single cohesive crack + second order, Annex L compression law of Ruiz et al. (2023) (reference: squash load, EC2 nominal curvature);
-  - shear: CCCM (Marí et al. 2014, with G_f size effect, stirrups, strut crushing) and MASM for SFRC (Marí et al. 2020) with σ_tu taken from the cohesive law (reference: MC2010 V_Rd,F + V_Rd,s, Annex L τ_Rd,cF, stirrup replacement);
+  - shear: CCCM (Marí et al. 2014, with G_f size effect, stirrups, strut crushing) and MASM for SFRC (Marí et al. 2020) with σ_tu taken from the cohesive law and Bažant's size-effect factor on the fibre term (reference: MC2010 V_Rd,F + V_Rd,s, Annex L τ_Rd,cF, stirrup replacement);
   - punching: Critical Shear Crack Theory (Muttoni 2008) with fibre bridging σ(ψd/6) from the cohesive law (Maya Duque et al. 2012) (reference: EC2-2004, MC2010 Level II).
 - Interfaces: Python library, **Streamlit app (ES/EN)**, MATLAB/Octave functions.
 
@@ -33,12 +33,13 @@ cross-checks (Annex L, MC2010, ACI 544.4R).
 | 20 R/SFRC beams, 0–40 kg/m³ × ρ = 0–3.14 % (Carpinteri, Cadamuro & Ventura, 2015; loads digitised) | P_max 0.90 (CoV 16.0 %); ρ = 0.25–1.13 %: 0.98 (CoV 9.3 %) |
 | 9 deep beams without stirrups (Minelli et al., 2014) | flexure-governed beams M_u/M_max 1.02–1.07; shear failures 0.32–0.84 |
 | 43 SFRC beams without stirrups (Cuenca et al., 2018 database), code shear checks | MC2010 1.07 (CoV 19.4 %), Annex L 1.14 (CoV 21.6 %) |
-| Same 43 beams, mechanical MASM with σ_tu = 0.33 f_R3 from the cohesive law (no fitting) | 0.91 (CoV 31.1 %): **unconservative**, 0.75 for d ≥ 900 mm (no size effect in the fibre term) — shown as a warning in the app |
+| Same 43 beams, mechanical MASM with σ_tu = 0.33 f_R3 from the cohesive law, original Eq. (26) (no fitting) | 0.91 (CoV 31.1 %), 0.75 for d ≥ 900 mm: no size effect in the fibre term |
+| Same, with Bažant's energetic size-effect factor λ_s = √(2/(1+d/254)) (ACI 318-19) on the fibre term (default since 1.2, no fitting) | 0.99 (CoV 29.0 %), 0.99 for d ≥ 900 mm; 27/43 ratios < 1 (high f_R3) — warning kept in the app |
 
 ## Quick start
 ```bash
 pip install -r requirements.txt
-pytest -q                              # 30 tests
+pytest -q                              # 31 tests
 streamlit run app/streamlit_app.py     # graphical application (see DEPLOY.md to publish it online)
 python examples/generate_all.py        # all figures, tables and numbers of the documents
 cd matlab && octave-cli --eval run_tests
@@ -74,8 +75,8 @@ docs/        manual (ES/EN), article (ES/EN), beamer (ES/EN), course (ES/EN), fi
 
 ## Limitations
 Hinge width s = h/2 (assumption); single dominant crack; rigid-plastic bond; monotonic loading; CoV of residual
-strengths in ECOV is a user input. Member models: the MASM fibre term lacks a size effect (unconservative for deep
-SFRC beams); the column (single-crack) and punching (CSCT + cohesive bridging) implementations are not yet
+strengths in ECOV is a user input. Member models: the MASM with σ_tu = 0.33 f_R3 still overestimates beams with high f_R3
+(the σ_tu–f_R relation is not calibrated); the column (single-crack) and punching (CSCT + cohesive bridging) implementations are not yet
 validated against tests within FracHinge; partial factors of the mechanical shear models are not reliability-calibrated.
 The software is an analysis/cross-check tool and **does not replace** the codes in force.
 

@@ -20,7 +20,7 @@ def test_neutral_axis_closed_form():
 def test_masm_eq26_hand_value():
     # Mari et al. (2020) Eq. (26), mean values; hand calculation
     b, d, a, rho, fcm, st = 250.0, 440.0, 1320.0, 0.0112, 32.1, 1.0
-    r = members.shear_masm_sfrc(b, d, a, rho, fcm, st)
+    r = members.shear_masm_sfrc(b, d, a, rho, fcm, st, size_effect=None)
     fct = 0.3 * (fcm - 8.0) ** (2 / 3)
     xi = max(2 / math.sqrt(1 + d / 200) * (d / a) ** 0.2, 0.45)
     s = st / fct
@@ -87,3 +87,13 @@ def test_code_references():
     k = 1 + math.sqrt(200 / 200)
     v = 0.18 / 1.5 * k * (100 * 0.008 * 30) ** (1 / 3)
     assert codes.punching_ec2_2004(1000, 200, 0.008, 30) == pytest.approx(v * 1000 * 200)
+
+
+def test_bazant_size_factor_on_fibre_term():
+    assert members.size_factor_bazant(254.0) == pytest.approx(1.0)
+    assert members.size_factor_bazant(100.0) == 1.0
+    assert members.size_factor_bazant(1270.0) == pytest.approx(math.sqrt(2 / 6))
+    r0 = members.shear_masm_sfrc(250, 1440, 4320, 0.0101, 32.1, 1.65, size_effect=None)
+    r1 = members.shear_masm_sfrc(250, 1440, 4320, 0.0101, 32.1, 1.65)
+    assert r1["V_fibres"] == pytest.approx(r0["V_fibres"] * members.size_factor_bazant(1440))
+    assert r1["V_u"] < r0["V_u"]

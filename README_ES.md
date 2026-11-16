@@ -10,7 +10,7 @@ normativo (Anejo L, MC2010, ACI 544.4R).
 **Comprobación de elementos (v1.1).** Cada comprobación da un resultado *principal* de mecánica de fractura o modelo
 mecánico y, por separado, una *referencia normativa*: flexocompresión (diagrama N–M con la rótula cohesiva), pilares
 esbeltos (fisura cohesiva única + segundo orden, ley de compresión del Anejo L de Ruiz et al. 2023), cortante (CCCM de
-Marí et al. 2014 con G_f y cercos; MASM de Marí et al. 2020 para HRFA con σ_tu de la ley cohesiva) y punzonamiento
+Marí et al. 2014 con G_f y cercos; MASM de Marí et al. 2020 para HRFA con σ_tu de la ley cohesiva y efecto tamaño de Bažant en el término de fibras) y punzonamiento
 (teoría de la fisura crítica de Muttoni 2008 con puenteo cohesivo σ(ψd/6), Maya Duque et al. 2012).
 
 ## Validación (reproducible con `python examples/generate_all.py`)
@@ -24,7 +24,8 @@ Marí et al. 2014 con G_f y cercos; MASM de Marí et al. 2020 para HRFA con σ_t
 | 20 vigas HA+HRFA, 0–40 kg/m³ × ρ = 0–3,14 % (Carpinteri, Cadamuro y Ventura, 2015; cargas digitalizadas) | P_max 0,90 (CoV 16,0 %); ρ = 0,25–1,13 %: 0,98 (CoV 9,3 %) |
 | 9 vigas de gran canto sin cercos (Minelli et al., 2014) | vigas que agotan a flexión M_u/M_max 1,02–1,07; roturas por cortante 0,32–0,84 |
 | 43 vigas de HRFA sin cercos (base de datos de Cuenca et al., 2018), comprobación normativa a cortante | MC2010 1,07 (CoV 19,4 %), Anejo L 1,14 (CoV 21,6 %) |
-| Mismas 43 vigas, MASM mecánico con σ_tu = 0,33 f_R3 de la ley cohesiva (sin ajuste) | 0,91 (CoV 31,1 %): **no conservador**, 0,75 con d ≥ 900 mm (el término de fibras no tiene efecto tamaño); la aplicación lo avisa |
+| Mismas 43 vigas, MASM con σ_tu = 0,33 f_R3 de la ley cohesiva, Ec. (26) original (sin ajuste) | 0,91 (CoV 31,1 %), 0,75 con d ≥ 900 mm: el término de fibras no tiene efecto tamaño |
+| Ídem con el factor de efecto tamaño energético de Bažant λ_s = √(2/(1+d/254)) (ACI 318-19) en el término de fibras (por defecto desde 1.2, sin ajuste) | 0,99 (CoV 29,0 %), 0,99 con d ≥ 900 mm; 27/43 cocientes < 1 (f_R3 alto); la app mantiene el aviso |
 
 ## Uso rápido
 ```bash
@@ -40,8 +41,8 @@ Manual técnico, artículo, presentaciones y curso, en español e inglés, en `d
 
 ## Limitaciones
 Ancho de rótula s = h/2 (hipótesis); fisura dominante única; adherencia rígido-plástica; carga monótona; el CoV de las
-resistencias residuales en el ECOV es un dato del usuario. Elementos: el término de fibras del MASM carece de efecto
-tamaño; los modelos de pilar (fisura única) y punzonamiento (CSCT + puenteo cohesivo) aún no se han validado con
+resistencias residuales en el ECOV es un dato del usuario. Elementos: con σ_tu = 0,33 f_R3 el MASM aún sobrestima las vigas con f_R3 alto
+(relación σ_tu–f_R no calibrada); los modelos de pilar (fisura única) y punzonamiento (CSCT + puenteo cohesivo) aún no se han validado con
 ensayos dentro de FracHinge; los coeficientes parciales de los modelos mecánicos de cortante no están calibrados. El programa es una herramienta de análisis y contraste y **no sustituye** a la
 normativa vigente.
 

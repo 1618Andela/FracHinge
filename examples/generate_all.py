@@ -1239,39 +1239,73 @@ def sensitivity_s():
 
 def validation_masm_cuenca():
     """MASM (Mari et al. 2020, Eq. 26) on the Cuenca et al. (2018) beams failing in shear, with the
-    residual stress sigma_tu taken from the cohesive laws used by FracHinge (no fitting)."""
+    residual stress sigma_tu taken from the cohesive laws used by FracHinge (no fitting).
+    Size-effect variants of the fibre term, all taken from the literature and none fitted:
+      'none' : original Eq. (26);
+      'sel'  : Bazant's energetic size-effect law with d0 = 254 mm (ACI 318-19 lambda_s) [adopted];
+      'lch'  : same law with d0 scaled by l_ch,FRC / l_ch,plain (Bazant: d0 proportional to l_ch);
+      'csct' : sigma_tu = sigma(w), w = eps d (critical shear crack width, Muttoni & Fernandez Ruiz 2008).
+    """
+    from scipy.optimize import brentq
     rows = []
     for (ref, bid, fib, vf, bw, d, ad, rho, fc, fR1, fR3, fm, Vu) in CUENCA_DB:
         if fm not in ("S", "SY"):
             continue
-        out = {}
-        for key, st in (("rp", fR3 / 3.0), ("al", 0.33 * fR3)):
-            r = members.shear_masm_sfrc(bw, d, ad * d, rho / 100.0, fc, st)
-            out[key] = Vu * 1e3 / r["V_u"]
+        rho = rho / 100.0
+        a = ad * d
+        V = Vu * 1e3
+        st = 0.33 * fR3
+        out = {"rp": V / members.shear_masm_sfrc(bw, d, a, rho, fc, fR3 / 3.0, size_effect=None)["V_u"],
+               "al": V / members.shear_masm_sfrc(bw, d, a, rho, fc, st, size_effect=None)["V_u"],
+               "sel": V / members.shear_masm_sfrc(bw, d, a, rho, fc, st)["V_u"]}
+        fct = fctm_from_fck(min(fc - 8.0, 60.0))
+        E, GF = ecm_from_fcm(fc), gf_mc2010(fc)
+        fFts = 0.45 * fR1
+        fFtu = max(fFts - (fFts - 0.5 * fR3 + 0.2 * fR1), 0.0)
+        lch_f = E * (GF + 0.5 * (fFts + fFtu) * 2.5) / fct ** 2
+        d0 = 254.0 * lch_f / (E * GF / fct ** 2)
+        out["lch"] = V / members.shear_masm_sfrc(bw, d, a, rho, fc, st, d0=d0)["V_u"]
+        law = law_annexL(fR1, fR3, fct, E, wu=10.0, include_matrix=False)
+        Es, Ecs = 200000.0, 10000.0 * fc ** (1.0 / 3.0)
+        n = Es / Ecs
+        c = d * (np.sqrt((rho * n) ** 2 + 2 * rho * n) - rho * n)
+
+        def g(Vt):
+            eps = Vt * (a - d / 2) / (bw * d * rho * Es * (d - c / 3)) * (0.6 * d - c) / (d - c)
+            s_w = float(law.sigma(np.array([eps * d]))[0])
+            return members.shear_masm_sfrc(bw, d, a, rho, fc, s_w, size_effect=None)["V_u"] - Vt
+        out["csct"] = V / brentq(g, 1e3, 5e6)
         rows.append(dict(ref=ref, d=d, fR3=fR3, **out))
-    for key, nm in (("rp", "RP"), ("al", "AL")):
+    for key, nm in (("rp", "RP"), ("al", "AL"), ("sel", "SEL"), ("lch", "LCH"), ("csct", "CSCT")):
         mu, cov = _stats([r[key] for r in rows])
         put(f"masm{nm}mean", mu)
         put(f"masm{nm}cov", cov, "{:.1f}")
         put(f"masm{nm}unsafe", sum(r[key] < 1.0 for r in rows), "{:d}")
-        big = [r[key] for r in rows if r["d"] >= 900]
-        small = [r[key] for r in rows if r["d"] < 900]
-        put(f"masm{nm}big", np.mean(big))
-        put(f"masm{nm}small", np.mean(small))
+        put(f"masm{nm}big", np.mean([r[key] for r in rows if r["d"] >= 900]))
+        put(f"masm{nm}small", np.mean([r[key] for r in rows if r["d"] < 900]))
+        put(f"masm{nm}min", min(r[key] for r in rows))
+    for grp, sel in (("Mi", lambda r: 22 <= r["ref"] <= 27), ("Ib", lambda r: 58 <= r["ref"] <= 69),
+                     ("Oa", lambda r: r["ref"] >= 78)):
+        for key, nm in (("al", "AL"), ("sel", "SEL")):
+            put(f"masm{nm}{grp}", np.mean([r[key] for r in rows if sel(r)]))
     put("masmN", len(rows), "{:d}")
+    put("lamFifteen", members.size_factor_bazant(1440.0))
     for lang in ("en", "es"):
-        fig, ax = plt.subplots(figsize=(4.6, 3.2))
-        x = [r["d"] for r in rows]
-        y = [r["al"] for r in rows]
-        c = [P[0] if r["fR3"] < 3 else (P[1] if r["fR3"] < 5 else P[2]) for r in rows]
-        ax.scatter(x, y, c=c, s=22, edgecolors="white", linewidths=0.6, zorder=3)
-        ax.axhline(1.0, color="#52514e", lw=0.8)
-        ax.set_xscale("log")
-        ax.set_xlabel("$d$ [mm]")
-        ax.set_ylabel("$V_{u,exp}/V_{MASM}$ (" + T(lang, "mean values", "valores medios") + ")")
-        for j, lb in enumerate(("$f_{R3}<3$", "$3\\leq f_{R3}<5$", "$f_{R3}\\geq5$ MPa")):
-            ax.scatter([], [], c=P[j], s=22, label=lb)
-        ax.legend(fontsize=7)
+        fig, ax = plt.subplots(1, 2, figsize=(7.4, 3.2), sharey=True)
+        for i, (key, ttl) in enumerate((("al", T(lang, "(a) Eq. (26), no size effect", "(a) Ec. (26), sin efecto tamaño")),
+                                        ("sel", T(lang, "(b) with Bazant $\\lambda_s$ on fibres", "(b) con $\\lambda_s$ de Bažant en fibras")))):
+            x = [r["d"] for r in rows]
+            y = [r[key] for r in rows]
+            c = [P[0] if r["fR3"] < 3 else (P[1] if r["fR3"] < 5 else P[2]) for r in rows]
+            ax[i].scatter(x, y, c=c, s=22, edgecolors="white", linewidths=0.6, zorder=3)
+            ax[i].axhline(1.0, color="#52514e", lw=0.8)
+            ax[i].set_xscale("log")
+            ax[i].set_xlabel("$d$ [mm]")
+            ax[i].set_title(ttl)
+        ax[0].set_ylabel("$V_{u,exp}/V_{MASM}$ (" + T(lang, "mean values", "valores medios") + ")")
+        for jj, lb in enumerate(("$f_{R3}<3$", "$3\\leq f_{R3}<5$", "$f_{R3}\\geq5$ MPa")):
+            ax[1].scatter([], [], c=P[jj], s=22, label=lb)
+        ax[1].legend(fontsize=7)
         fig.tight_layout()
         save(fig, "fig_validation_masm", lang)
     json.dump(rows, open(os.path.join(TAB, "validation_masm.json"), "w"), indent=1, default=float)

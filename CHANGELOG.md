@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.2.0 (2026-11-16) – size effect in fibre shear
+- MASM (Marí et al. 2020): the fibre term is multiplied by Bažant's energetic size-effect factor λ_s = √(2/(1+d/d0)) ≤ 1, d0 = 254 mm (Bažant & Kim 1984; ACI 318-19), default `size_effect="bazant"`; `size_effect=None` gives the original Eq. (26). New `members.size_factor_bazant`.
+- Validation on the 43 Cuenca et al. (2018) shear failures, no fitting: mean 0.91 → 0.99, d ≥ 900 mm 0.75 → 0.99 (CoV 31.1 → 29.0 %). Two other fracture-mechanics variants are reported and rejected: d0 ∝ l_ch,FRC (no size effect, 0.91) and σ(w = ε d) from the critical shear crack theory (0.82).
+- Manual section on size effect, updated slides, course exercise, app warning, MATLAB option and test.
+
 ## 1.1.0 (2026-11-16) – member checks
 - New module `frachinge.members` (fracture mechanics / mechanical models, primary results): N–M interaction with the cohesive hinge; slender-column single-crack second-order model; CCCM shear for RC with or without stirrups (Marí et al. 2014) and MASM for SFRC without stirrups (Marí et al. 2020) with σ_tu from the cohesive law, strut crushing and a design wrapper; punching by the CSCT with cohesive fibre bridging (Muttoni 2008; Maya Duque et al. 2012).
 - New code references in `frachinge.codes` (kept separate): V_Rd,s, V_Rd,max, MC2010 V_Rd,F + V_Rd,s, Annex L stirrup replacement, squash load, EC2 nominal curvature, EC2-2004 and MC2010 Level II punching, Annex L N–M interaction.

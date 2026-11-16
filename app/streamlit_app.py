@@ -358,10 +358,13 @@ with tabs[2]:
         st.table(pd.DataFrame(comp_rows, columns=[t("Componente", "Component"), "kN"]))
         (st.success if r["V_Rd"] >= VEd * 1e3 else st.error)(f"V_Ed / V_Rd = {VEd * 1e3 / r['V_Rd']:.2f}")
         if use_f:
-            st.warning(t("Validación (Cuenca et al. 2018, 43 vigas sin cercos): media Vexp/Vmasm = 0,91, CoV 31 %; "
-                         "sobrestima la resistencia de vigas con d ≥ 900 mm (media 0,75). Contrástese con la referencia.",
-                         "Validation (Cuenca et al. 2018, 43 beams without stirrups): mean Vexp/Vmasm = 0.91, CoV 31 %; "
-                         "it overestimates beams with d ≥ 900 mm (mean 0.75). Check against the code reference."))
+            st.write(f"λs (Bažant / ACI 318-19) = {r.get('lambda_F', 1.0):.3f}")
+            st.warning(t("Validación (Cuenca et al. 2018, 43 vigas sin cercos, sin ajuste): con el efecto tamaño de Bažant "
+                         "en el término de fibras, media Vexp/Vcalc = 0,99 (CoV 29 %) y 0,99 para d ≥ 900 mm (antes 0,75); "
+                         "27 de 43 cocientes < 1, sobre todo con fR3 alto. Contrástese con la referencia normativa.",
+                         "Validation (Cuenca et al. 2018, 43 beams without stirrups, no fitting): with Bažant's size effect on "
+                         "the fibre term, mean Vexp/Vcalc = 0.99 (CoV 29 %) and 0.99 for d ≥ 900 mm (previously 0.75); "
+                         "27 of 43 ratios < 1, mainly with high fR3. Check against the code reference."))
         st.caption(t("Coeficientes parciales no calibrados por fiabilidad (Marí et al. 2020).",
                      "Partial factors not calibrated by reliability analysis (Marí et al. 2020)."))
     with cref:
@@ -476,5 +479,5 @@ with tabs[4]:
 
 st.sidebar.markdown("---")
 st.sidebar.warning(t("Herramienta de apoyo al cálculo: no sustituye la comprobación del proyectista conforme a EN 1992-1-1:2023.", "Design-support tool: it does not replace the designer's verification according to EN 1992-1-1:2023."))
-st.sidebar.caption("FracHinge v1.1.0 · MIT · " + t("Ver docs/ para manual, artículo y curso.",
+st.sidebar.caption("FracHinge v1.2.0 · MIT · " + t("Ver docs/ para manual, artículo y curso.",
                                                   "See docs/ for manual, article and course."))
